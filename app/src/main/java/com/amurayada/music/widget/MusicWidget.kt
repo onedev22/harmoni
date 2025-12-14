@@ -88,7 +88,7 @@ class MusicWidget : GlanceAppWidget() {
         val likeButtonWidth = if (isSmall) 40.dp else 53.dp
         val likeButtonHeight = if (isSmall) 56.dp else 78.dp
         val cornerRadius = if (isSmall) 18.dp else 24.dp
-        val spacerSize = if (isSmall) 6.dp else 14.dp
+        val spacerSize = if (isSmall) 10.dp else 14.dp
         val iconSize = if (isSmall) 22.dp else 24.dp
         val playIconSize = if (isSmall) 28.dp else 32.dp
         val titleSize = if (isSmall) 17.sp else 20.sp

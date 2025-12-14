@@ -99,7 +99,7 @@ class MusicWidget : GlanceAppWidget() {
         Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
-                .then(if (isSmall) GlanceModifier.height(68.dp) else GlanceModifier.fillMaxHeight())
+                .then(if (isSmall) GlanceModifier.height(76.dp) else GlanceModifier.fillMaxHeight())
                 .background(Color(0xFF1d2a1e))
                 .cornerRadius(containerCornerRadius)
                 .padding(spacerSize)

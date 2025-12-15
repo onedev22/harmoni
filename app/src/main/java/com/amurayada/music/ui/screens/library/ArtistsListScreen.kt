@@ -55,7 +55,7 @@ fun ArtistsListScreen(
             modifier = modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 100.dp, top = 8.dp)
         ) {
-            items(artists, key = { it.id }) { artist ->
+            items(artists, key = { it.id }, contentType = { "artist_item" }) { artist ->
                 ArtistListItem(
                     artist = artist,
                     onClick = { onArtistClick(artist) }

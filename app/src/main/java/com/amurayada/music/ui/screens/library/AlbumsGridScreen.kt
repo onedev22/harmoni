@@ -57,7 +57,7 @@ fun AlbumsGridScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(albums, key = { it.id }) { album ->
+            items(albums, key = { it.id }, contentType = { "album_card" }) { album ->
                 AlbumCard(
                     album = album,
                     onClick = { onAlbumClick(album) }

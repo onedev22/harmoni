@@ -40,14 +40,13 @@ fun AlbumCard(
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.Start
     ) {
-        // Album Art with shadow
+        // Album Art - removed shadow for performance
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f),
             shape = RoundedCornerShape(16.dp),
-            tonalElevation = 4.dp,
-            shadowElevation = 8.dp
+            tonalElevation = 2.dp
         ) {
             AsyncImage(
                 model = imageRequest,

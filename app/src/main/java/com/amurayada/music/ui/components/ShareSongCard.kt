@@ -63,6 +63,7 @@ fun ShareSongCard(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(song.albumArtUri)
                     .crossfade(true)
+                    .allowHardware(false) // Crucial for Bitmap capture
                     .build(),
                 contentDescription = "Album Art",
                 modifier = Modifier
@@ -112,10 +113,14 @@ fun ShareSongCard(
             ) {
                 // Logo (Using Text + Icon for now as placeholder for SVG)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground), // Placeholder
+                    androidx.compose.foundation.Image(
+                        painter = coil.compose.rememberAsyncImagePainter(
+                            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                .data(R.mipmap.icono)
+                                .allowHardware(false) // Crucial to prevent crash
+                                .build()
+                        ),
                         contentDescription = "Logo",
-                        tint = Color.White,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))

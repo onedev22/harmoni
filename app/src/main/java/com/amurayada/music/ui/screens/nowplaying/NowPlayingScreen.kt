@@ -618,82 +618,16 @@ fun NowPlayingScreen(
                         }
                         
                         // Playback Controls
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = onShuffleClick,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Shuffle,
-                                    contentDescription = "Aleatorio",
-                                    tint = if (playbackMode.isShuffleEnabled) gradientColor else Color.White.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            
-                            IconButton(
-                                onClick = onSkipPreviousClick,
-                                modifier = Modifier.size(64.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.SkipPrevious,
-                                    contentDescription = "Anterior",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(40.dp)
-                                )
-                            }
-                            
-                            FilledIconButton(
-                                onClick = onPlayPauseClick,
-                                modifier = Modifier.size(72.dp),
-                                shape = CircleShape,
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = gradientColor
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = if (playbackState is PlaybackState.Playing) {
-                                        Icons.Rounded.Pause
-                                    } else {
-                                        Icons.Rounded.PlayArrow
-                                    },
-                                    contentDescription = if (playbackState is PlaybackState.Playing) "Pausar" else "Reproducir",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(40.dp)
-                                )
-                            }
-                            
-                            IconButton(
-                                onClick = onSkipNextClick,
-                                modifier = Modifier.size(64.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.SkipNext,
-                                    contentDescription = "Siguiente",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(40.dp)
-                                )
-                            }
-                            
-                            IconButton(
-                                onClick = onRepeatClick,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = when (playbackMode.repeatMode) {
-                                        com.amurayada.music.data.model.RepeatMode.ONE -> Icons.Rounded.RepeatOne
-                                        else -> Icons.Rounded.Repeat
-                                    },
-                                    contentDescription = "Repetir",
-                                    tint = if (playbackMode.repeatMode != com.amurayada.music.data.model.RepeatMode.OFF) gradientColor else Color.White.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
+                        com.amurayada.music.ui.components.PlaybackControls(
+                            playbackState = playbackState,
+                            playbackMode = playbackMode,
+                            onPlayPauseClick = onPlayPauseClick,
+                            onSkipNextClick = onSkipNextClick,
+                            onSkipPreviousClick = onSkipPreviousClick,
+                            onShuffleClick = onShuffleClick,
+                            onRepeatClick = onRepeatClick,
+                            accentColor = gradientColor
+                        )
                         
                         // Bottom Options Row
                         Row(
@@ -1053,82 +987,16 @@ fun NowPlayingScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Playback Controls
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onShuffleClick,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Shuffle,
-                            contentDescription = "Aleatorio",
-                            tint = if (playbackMode.isShuffleEnabled) gradientColor else Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    
-                    IconButton(
-                        onClick = onSkipPreviousClick,
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipPrevious,
-                            contentDescription = "Anterior",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                    
-                    FilledIconButton(
-                        onClick = onPlayPauseClick,
-                        modifier = Modifier.size(72.dp),
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = gradientColor
-                        )
-                    ) {
-                        Icon(
-                            imageVector = if (playbackState is PlaybackState.Playing) {
-                                Icons.Rounded.Pause
-                            } else {
-                                Icons.Rounded.PlayArrow
-                            },
-                            contentDescription = if (playbackState is PlaybackState.Playing) "Pausar" else "Reproducir",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                    
-                    IconButton(
-                        onClick = onSkipNextClick,
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipNext,
-                            contentDescription = "Siguiente",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                    
-                    IconButton(
-                        onClick = onRepeatClick,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = when (playbackMode.repeatMode) {
-                                com.amurayada.music.data.model.RepeatMode.ONE -> Icons.Rounded.RepeatOne
-                                else -> Icons.Rounded.Repeat
-                            },
-                            contentDescription = "Repetir",
-                            tint = if (playbackMode.repeatMode != com.amurayada.music.data.model.RepeatMode.OFF) gradientColor else Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
+                com.amurayada.music.ui.components.PlaybackControls(
+                    playbackState = playbackState,
+                    playbackMode = playbackMode,
+                    onPlayPauseClick = onPlayPauseClick,
+                    onSkipNextClick = onSkipNextClick,
+                    onSkipPreviousClick = onSkipPreviousClick,
+                    onShuffleClick = onShuffleClick,
+                    onRepeatClick = onRepeatClick,
+                    accentColor = gradientColor
+                )
                 
                 Spacer(modifier = Modifier.weight(0.15f))
                     

@@ -54,10 +54,8 @@ fun HomeScreen(
         }
     }
     
-    val suggestedSongs by remember(songs) {
-        derivedStateOf {
-            if (songs.isNotEmpty()) songs.shuffled().take(6) else emptyList()
-        }
+    val suggestedSongs = remember(songs) {
+        if (songs.isNotEmpty()) songs.shuffled().take(6) else emptyList()
     }
     
     LazyColumn(
@@ -470,8 +468,16 @@ private fun ModernSongCard(
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
         ) {
             Box {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val imageRequest = androidx.compose.runtime.remember(song.albumArtUri) {
+                    coil.request.ImageRequest.Builder(context)
+                        .data(song.albumArtUri)
+                        .crossfade(true)
+                        .size(300)
+                        .build()
+                }
                 AsyncImage(
-                    model = song.albumArtUri,
+                    model = imageRequest,
                     contentDescription = song.title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -517,8 +523,16 @@ private fun ModernAlbumCard(
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
         ) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val imageRequest = androidx.compose.runtime.remember(album.artworkUri) {
+                coil.request.ImageRequest.Builder(context)
+                    .data(album.artworkUri)
+                    .crossfade(true)
+                    .size(300)
+                    .build()
+            }
             AsyncImage(
-                model = album.artworkUri,
+                model = imageRequest,
                 contentDescription = album.name,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop

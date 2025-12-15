@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.PI
+import kotlin.math.absoluteValue
 import kotlin.math.sin
 
 @Composable
@@ -24,21 +26,20 @@ fun EqualizerIndicator(
     minHeight: Dp = 4.dp,
     color: Color = MaterialTheme.colorScheme.primary
 ) {
-    // Single shared animation - much more efficient
     val infiniteTransition = rememberInfiniteTransition(label = "equalizer")
     
-    val animationProgress by infiniteTransition.animateFloat(
+    // Single shared animation (0f to 1f) instead of 3 separate animations
+    val phase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "progress"
+        label = "shared_phase"
     )
     
     val heightRange = maxHeight - minHeight
-    val staticHeight = minHeight + heightRange * 0.4f
     
     Row(
         modifier = modifier,
@@ -46,13 +47,16 @@ fun EqualizerIndicator(
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         repeat(barCount) { index ->
-            // Calculate height using sine wave with phase offset
-            val phase = index * 2.1f
+            // Calculate height based on shared phase + offset
+            val offset = index * 0.33f
+            val normalizedPhase = ((phase + offset) % 1f)
+            
             val height = if (isAnimating) {
-                val wave = sin((animationProgress * 2 * Math.PI + phase).toFloat())
-                minHeight + heightRange * ((wave + 1f) / 2f)
+                // Simple sine wave calculation (no animation overhead)
+                val waveValue = sin(normalizedPhase * PI * 2).toFloat().absoluteValue
+                minHeight + (heightRange * waveValue)
             } else {
-                staticHeight
+                minHeight + heightRange / 3
             }
 
             Box(

@@ -7,9 +7,6 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     
-    <!-- Internet permission for lyrics API -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    
     <!-- Permissions for foreground service and notifications -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />

@@ -59,19 +59,27 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     
     // Favorites list - persisted
     private val _favorites = mutableStateListOf<Song>()
-    val favorites: List<Song> get() = _favorites.toList()
+    private val _favoritesFlow = MutableStateFlow<List<Song>>(emptyList())
+    val favorites: StateFlow<List<Song>> = _favoritesFlow.asStateFlow()
     
     // Recently played (history) - persisted
     private val _recentlyPlayed = mutableStateListOf<Song>()
-    val recentlyPlayed: List<Song> get() = _recentlyPlayed.toList()
+    private val _recentlyPlayedFlow = MutableStateFlow<List<Song>>(emptyList())
+    val recentlyPlayed: StateFlow<List<Song>> = _recentlyPlayedFlow.asStateFlow()
     
     // Most played tracking - persisted
     private val playCountMap = mutableMapOf<Long, Int>()
-    val mostPlayed: List<Song>
-        get() = _recentlyPlayed
+    private val _mostPlayedFlow = MutableStateFlow<List<Song>>(emptyList())
+    val mostPlayed: StateFlow<List<Song>> = _mostPlayedFlow.asStateFlow()
+    
+    private fun updateDerivedFlows() {
+        _favoritesFlow.value = _favorites.toList()
+        _recentlyPlayedFlow.value = _recentlyPlayed.toList()
+        _mostPlayedFlow.value = _recentlyPlayed
             .distinctBy { it.id }
             .sortedByDescending { playCountMap[it.id] ?: 0 }
             .take(20)
+    }
             
     // Event to expand player from other screens (e.g. widget)
     private val _expandPlayerEvent = kotlinx.coroutines.flow.MutableSharedFlow<Unit>()
@@ -99,6 +107,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     val songJson = jsonArray.getJSONObject(i)
                     _favorites.add(songFromJson(songJson))
                 }
+                updateDerivedFlows()
             } catch (e: Exception) {
                 // Ignore parsing errors
             }
@@ -113,6 +122,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     val songJson = jsonArray.getJSONObject(i)
                     _recentlyPlayed.add(songFromJson(songJson))
                 }
+                updateDerivedFlows()
             } catch (e: Exception) {
                 // Ignore parsing errors
             }
@@ -262,9 +272,20 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
                     if (currentIndex >= 0 && currentIndex < queue.size) {
                         val newSong = queue[currentIndex]
                         currentSong = newSong
-                        addToHistory(newSong)
+                        // Remove if already exists (to move it to front)
+                        _recentlyPlayed.removeAll { it.id == newSong.id }
+                        // Add to front
+                        _recentlyPlayed.add(0, newSong)
+                        // Keep only last 50 items
+                        if (_recentlyPlayed.size > 50) {
+                            _recentlyPlayed.removeAt(_recentlyPlayed.size - 1)
+                        }
+                        
                         playCountMap[newSong.id] = (playCountMap[newSong.id] ?: 0) + 1
+                        
+                        saveHistory()
                         savePlayCounts()
+                        updateDerivedFlows()
                         loadLyrics(newSong.id)
                         updatePlaybackState()
                     } else {
@@ -462,6 +483,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
             _favorites.add(0, song)
         }
         saveFavorites()
+        updateDerivedFlows()
     }
     
     fun isFavorite(song: Song): Boolean {

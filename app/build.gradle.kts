@@ -58,11 +58,20 @@ android {
         jvmTarget = "11"
         freeCompilerArgs = listOf(
             "-opt-in=kotlin.RequiresOptIn",
-            "-Xjvm-default=all"
+            "-Xjvm-default=all",
+            // Compose optimizations
+            "-P",
+            "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=true"
         )
     }
     buildFeatures {
         compose = true
+        buildConfig = false // Disable BuildConfig generation
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 }
 

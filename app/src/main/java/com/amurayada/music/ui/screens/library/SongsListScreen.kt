@@ -27,6 +27,7 @@ fun SongsListScreen(
     onShuffle: () -> Unit,
     onAddToPlaylist: (com.amurayada.music.data.model.Playlist, Song) -> Unit,
     onCreatePlaylist: () -> Unit,
+    onDeleteSong: (Song) -> Unit = {},
     modifier: Modifier = Modifier,
     currentSong: Song? = null,
     isPlaying: Boolean = false
@@ -63,7 +64,7 @@ fun SongsListScreen(
     } else {
         LazyColumn(
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp)
+            contentPadding = PaddingValues(bottom = 180.dp)
         ) {
             // Quick actions
             item {
@@ -124,6 +125,23 @@ fun SongsListScreen(
                                         showAddToPlaylistDialog = song
                                     }
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("Eliminar") },
+                                    onClick = {
+                                        showMenu = false
+                                        onDeleteSong(song)
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Rounded.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    colors = MenuDefaults.itemColors(
+                                        textColor = MaterialTheme.colorScheme.error
+                                    )
+                                )
                             }
                         }
                     }
@@ -133,7 +151,7 @@ fun SongsListScreen(
     }
 
     if (showAddToPlaylistDialog != null) {
-        com.amurayada.music.ui.components.AddToPlaylistDialog(
+        com.amurayada.music.ui.components.AddToPlaylistSheet(
             playlists = playlists,
             onPlaylistSelected = { playlist ->
                 showAddToPlaylistDialog?.let { song: Song ->
@@ -143,11 +161,6 @@ fun SongsListScreen(
             },
             onCreateNewPlaylist = {
                 onCreatePlaylist()
-                // Dialog stays open or closes? Usually closes and navigates or shows create dialog.
-                // For simplicity, let's close it. The user will be taken to create playlist screen or dialog.
-                // But wait, onCreatePlaylist in MainActivity usually just creates it. 
-                // We need a way to create AND add. 
-                // For now, let's just close this and let the user create it separately or handle it in parent.
                 showAddToPlaylistDialog = null
             },
             onDismiss = { showAddToPlaylistDialog = null }

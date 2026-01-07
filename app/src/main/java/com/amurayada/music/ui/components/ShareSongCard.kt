@@ -116,7 +116,7 @@ fun ShareSongCard(
                     androidx.compose.foundation.Image(
                         painter = coil.compose.rememberAsyncImagePainter(
                             model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
-                                .data(R.mipmap.icono)
+                                .data(R.drawable.ic_notification_custom)
                                 .allowHardware(false) // Crucial to prevent crash
                                 .build()
                         ),

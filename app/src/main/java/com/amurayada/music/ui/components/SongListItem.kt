@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -16,6 +18,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.MoreVert
 import com.amurayada.music.data.model.Song
 
 @Composable
@@ -26,7 +31,8 @@ fun SongListItem(
     index: Int? = null,
     isCurrentSong: Boolean = false,
     isPlaying: Boolean = false,
-    trailingContent: @Composable (() -> Unit)? = null
+    trailingContent: @Composable (() -> Unit)? = null,
+    onDownloadClick: ((Song) -> Unit)? = null
 ) {
     val backgroundColor = if (isCurrentSong) {
         MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
@@ -124,6 +130,36 @@ fun SongListItem(
         if (trailingContent != null) {
             Spacer(modifier = Modifier.width(8.dp))
             trailingContent()
+        } else if (onDownloadClick != null) {
+             Spacer(modifier = Modifier.width(8.dp))
+             var showMenu by remember { androidx.compose.runtime.mutableStateOf(false) }
+             Box {
+                 IconButton(onClick = { showMenu = true }) {
+                     Icon(
+                         androidx.compose.material.icons.Icons.Rounded.MoreVert,
+                         contentDescription = "Opciones",
+                         tint = MaterialTheme.colorScheme.onSurfaceVariant
+                     )
+                 }
+                 DropdownMenu(
+                     expanded = showMenu,
+                     onDismissRequest = { showMenu = false }
+                 ) {
+                     DropdownMenuItem(
+                         text = { Text("Descargar") },
+                         onClick = {
+                             showMenu = false
+                             onDownloadClick(song)
+                         },
+                         leadingIcon = {
+                             Icon(
+                                 androidx.compose.material.icons.Icons.Rounded.Download,
+                                 contentDescription = null
+                             )
+                         }
+                     )
+                 }
+             }
         }
     }
 }

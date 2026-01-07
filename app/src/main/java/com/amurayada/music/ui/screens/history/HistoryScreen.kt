@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,7 +47,7 @@ fun HistoryScreen(
             },
             navigationIcon = {
                 IconButton(onClick = onBackClick) {
-                    Icon(Icons.Rounded.ArrowBack, contentDescription = "Atrás")
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Atrás")
                 }
             },
             actions = {
@@ -55,7 +56,13 @@ fun HistoryScreen(
                         Icon(Icons.Rounded.DeleteSweep, contentDescription = "Borrar historial")
                     }
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = if (MaterialTheme.colorScheme.background == androidx.compose.ui.graphics.Color.Transparent) 
+                    androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surface,
+                scrolledContainerColor = if (MaterialTheme.colorScheme.background == androidx.compose.ui.graphics.Color.Transparent) 
+                    androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surface
+            )
         )
         
         if (historyItems.isEmpty()) {
@@ -91,7 +98,7 @@ fun HistoryScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 16.dp)
+                contentPadding = PaddingValues(bottom = 100.dp)
             ) {
                 itemsIndexed(
                     items = historyItems,

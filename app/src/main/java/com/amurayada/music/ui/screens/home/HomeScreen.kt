@@ -1,9 +1,6 @@
 package com.amurayada.music.ui.screens.home
 
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,17 +15,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.amurayada.music.data.model.Album
+import com.amurayada.music.data.model.Artist
 import com.amurayada.music.data.model.Song
+import com.amurayada.music.data.repository.HomeSection
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,11 +37,23 @@ fun HomeScreen(
     recentlyPlayed: List<Song>,
     recentlyAddedSongs: List<Song>,
     mostPlayed: List<Song>,
+    timeCapsuleSongs: List<Song>,
     onSongClick: (Song, List<Song>) -> Unit,
     onAlbumClick: (Album) -> Unit,
+    onPlaylistClick: (com.amurayada.music.data.model.Playlist) -> Unit = {},
+
+    onArtistClick: (Artist) -> Unit,
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onHistoryClick: () -> Unit,
+    onRecapClick: () -> Unit,
+
+    onTimeCapsuleClick: () -> Unit,
+    onRefreshClick: () -> Unit = {},
+    onLoadMore: () -> Unit = {},
+    isOnlineMode: Boolean = false,
+    isHomeExhausted: Boolean = false,
+    onlineSections: List<HomeSection> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val greeting = remember {
@@ -59,476 +69,484 @@ fun HomeScreen(
         if (songs.isNotEmpty()) songs.shuffled().take(6) else emptyList()
     }
     
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp)
-    ) {
-        // Modern Header with Dynamic Gradient
-        item(key = "header") {
-            val colorScheme = MaterialTheme.colorScheme
-            val backgroundBrush = remember(colorScheme) {
-                Brush.verticalGradient(
-                    colors = listOf(
-                        colorScheme.primary.copy(alpha = 0.15f),
-                        colorScheme.primaryContainer.copy(alpha = 0.08f),
-                        colorScheme.background
-                    )
-                )
-            }
+    val colorScheme = MaterialTheme.colorScheme
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState() // Use fully qualified class name or import it if missing
+    
+    // Improved Scroll Detection using state
+    val shouldLoadMore by remember {
+        androidx.compose.runtime.derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(backgroundBrush)
-                    .statusBarsPadding()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(top = 28.dp, bottom = 20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 16.dp)
-                    ) {
-                        Text(
-                            text = greeting,
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "¿Qué quieres escuchar?",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-                    }
-                    
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledIconButton(
-                            onClick = onSearchClick,
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                            )
-                        ) {
-                            Icon(Icons.Rounded.Search, contentDescription = "Buscar")
-                        }
-                        
-                        Box {
-                            var showMenu by remember { mutableStateOf(false) }
-                            
-                            FilledIconButton(
-                                onClick = { showMenu = true },
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                )
-                            ) {
-                                Icon(Icons.Rounded.MoreVert, contentDescription = "Más opciones")
-                            }
-                            
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Historial") },
-                                    onClick = {
-                                        showMenu = false
-                                        onHistoryClick()
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.History, contentDescription = null)
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Ajustes") },
-                                    onClick = {
-                                        showMenu = false
-                                        onSettingsClick()
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.Settings, contentDescription = null)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            // Trigger when reaching the last few items
+            // Ensuring we have content to scroll
+            totalItems > 3 && lastVisibleItemIndex >= (totalItems - 2)
         }
-        
-        // Premium Quick Actions
-        item(key = "quick_actions") {
+    }
+    
+    LaunchedEffect(shouldLoadMore, isHomeExhausted) {
+        if (shouldLoadMore && !isHomeExhausted) {
+            onLoadMore()
+        }
+    }
+    
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 200.dp)
+    ) {
+        // Clean Header
+        item(key = "header") {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 48.dp, bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                val colorScheme = MaterialTheme.colorScheme
-                
-                // Shuffle All Button
-                ElevatedCard(
-                    onClick = {
-                        if (songs.isNotEmpty()) {
-                            val shuffled = songs.shuffled()
-                            onSongClick(shuffled.first(), shuffled)
-                        }
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(
-                            BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                            RoundedCornerShape(16.dp)
-                        ),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = colorScheme.primaryContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
+                Text(
+                    text = greeting,
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onBackground,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onSearchClick) {
                         Icon(
-                            Icons.Rounded.Shuffle,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
-                            tint = colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            "Mezclar",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = colorScheme.onPrimaryContainer
+                            Icons.Rounded.Search,
+                            contentDescription = "Buscar",
+                            tint = colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
-                }
-                
-                // Play All Button
-                ElevatedCard(
-                    onClick = {
-                        if (songs.isNotEmpty()) {
-                            onSongClick(songs.first(), songs)
+                    
+                    Box {
+                        var showMenu by remember { mutableStateOf(false) }
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                Icons.Rounded.MoreVert,
+                                contentDescription = "Más",
+                                tint = colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(28.dp)
+                            )
                         }
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(
-                            BorderStroke(1.dp, colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                            RoundedCornerShape(16.dp)
-                        ),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = colorScheme.tertiaryContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
-                            tint = colorScheme.tertiary
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            "Reproducir",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = colorScheme.onTertiaryContainer
-                        )
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            modifier = Modifier.background(colorScheme.surface)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Actualizar") },
+                                onClick = { showMenu = false; onRefreshClick() },
+                                leadingIcon = { Icon(Icons.Rounded.Refresh, null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Historial") },
+                                onClick = { showMenu = false; onHistoryClick() },
+                                leadingIcon = { Icon(Icons.Rounded.History, null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Ajustes") },
+                                onClick = { showMenu = false; onSettingsClick() },
+                                leadingIcon = { Icon(Icons.Rounded.Settings, null) }
+                            )
+                        }
                     }
                 }
             }
         }
         
-        // Recently Added
-        if (recentlyAddedSongs.isNotEmpty()) {
-            item(key = "recently_added_header") {
-                Spacer(modifier = Modifier.height(12.dp))
-                ModernSectionHeader(
-                    title = "Agregadas recientemente",
-                    icon = Icons.Rounded.NewReleases,
-                    accentColor = MaterialTheme.colorScheme.tertiary
-                )
+        // Quick Actions Chips
+        item(key = "chips") {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(bottom = 8.dp) // Reduced from 24.dp
+            ) {
+                item {
+                    ActionChip(
+                        text = "Aleatorio",
+                        icon = Icons.Rounded.Shuffle,
+                        onClick = {
+                            if (songs.isNotEmpty()) {
+                                val shuffled = songs.shuffled()
+                                onSongClick(shuffled.first(), shuffled)
+                            }
+                        }
+                    )
+                }
+                item {
+                    ActionChip(
+                        text = "Cápsula",
+                        icon = Icons.Rounded.HourglassEmpty,
+                        onClick = onTimeCapsuleClick
+                    )
+                }
+                item {
+                    ActionChip(
+                        text = "Recap",
+                        icon = Icons.Rounded.AutoGraph,
+                        onClick = onRecapClick
+                    )
+                }
+                item {
+                    ActionChip(
+                        text = "Historial",
+                        icon = Icons.Rounded.History,
+                        onClick = onHistoryClick
+                    )
+                }
             }
-            
-            item(key = "recently_added_row") {
+        }
+        
+        // Online Mode Content
+        if (isOnlineMode) {
+             if (onlineSections.isEmpty()) {
+                 item(key = "online_loading") {
+                     Box(
+                         modifier = Modifier.fillMaxWidth().padding(32.dp),
+                         contentAlignment = Alignment.Center
+                     ) {
+                         CircularProgressIndicator()
+                     }
+                 }
+             } else {
+                  val suggestions = onlineSections.find { it.title == "Sugerencias para ti" }
+                  val others = onlineSections.filter { it.title != "Sugerencias para ti" }
+
+                  // 1. Suggestions Section (Paged Layout: 4 items per page)
+                  if (suggestions != null) {
+                      item(key = "suggestions_paged") {
+                          Column {
+                              GoogleSectionHeader(suggestions.title)
+                              
+                               val chunkedSongs = suggestions.songs.take(16).chunked(4) // 4 items per column (Quick Picks style)
+                               
+                               LazyRow(
+                                   contentPadding = PaddingValues(horizontal = 24.dp),
+                                   horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                   modifier = Modifier.fillMaxWidth()
+                               ) {
+                                   items(chunkedSongs) { pageSongs ->
+                                       Column(
+                                           modifier = Modifier.width(300.dp), // Fixed width for the column
+                                           verticalArrangement = Arrangement.spacedBy(12.dp)
+                                       ) {
+                                           pageSongs.forEach { song ->
+                                               GoogleStyleWideCard(
+                                                   song = song,
+                                                   onClick = { onSongClick(song, suggestions.songs) }
+                                               )
+                                           }
+                                       }
+                                   }
+                               }
+                           }
+                       }
+                  }
+
+                  // 2. Recently Played (Injected here for Online Mode)
+                  if (recentlyPlayed.isNotEmpty()) {
+                      item(key = "recent_header_online") {
+                          GoogleSectionHeader("Escuchado recientemente")
+                      }
+                      item(key = "recent_list_online") {
+                          LazyRow(
+                              contentPadding = PaddingValues(horizontal = 24.dp),
+                              horizontalArrangement = Arrangement.spacedBy(16.dp)
+                          ) {
+                              items(
+                                  items = recentlyPlayed.take(10),
+                                  key = { "recent_online_${it.id}" }
+                              ) { song ->
+                                  GoogleStyleCard(song) { onSongClick(song, recentlyPlayed) }
+                              }
+                          }
+                      }
+                  }
+
+                  // 3. Other Sections
+                  items(
+                      items = others,
+                      key = { "section_${it.title}" }
+                  ) { section ->
+                      // Check for content first
+                      val hasSongs = section.songs.isNotEmpty()
+                      val hasPlaylists = section.playlists.isNotEmpty()
+                      val hasAlbums = section.albums.isNotEmpty()
+                      
+                      if (hasSongs || hasPlaylists || hasAlbums) {
+                          GoogleSectionHeader(section.title)
+                          
+                          // DYNAMIC LAYOUT SELECTION
+                          if (hasSongs) {
+                                // SONGS -> Use Quick Picks Grid (Mixed 4 items per column)
+                                val chunkedSongs = section.songs.take(16).chunked(4)
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 24.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(chunkedSongs) { pageSongs ->
+                                        Column(
+                                            modifier = Modifier.width(300.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            pageSongs.forEach { song ->
+                                                GoogleStyleWideCard(song = song, onClick = { onSongClick(song, section.songs) })
+                                            }
+                                        }
+                                    }
+                                }
+                          } else if (hasPlaylists) {
+                                // PLAYLISTS
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 24.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(section.playlists) { playlist ->
+                                        GoogleStylePlaylistCard(playlist = playlist, onClick = { onPlaylistClick(playlist) })
+                                    }
+                                }
+                          } else {
+                              // ALBUMS
+                              val isImmersive = section.title.lowercase().contains("mix") || 
+                                                section.title.lowercase().contains("radio") || 
+                                                section.title.lowercase().contains("again") ||
+                                                section.title.lowercase().contains("de nuevo") ||
+                                                section.title.lowercase().contains("pick") ||
+                                                section.title.lowercase().contains("selecciones")
+    
+                              LazyRow(
+                                   contentPadding = PaddingValues(horizontal = 24.dp),
+                                   horizontalArrangement = Arrangement.spacedBy(16.dp)
+                              ) {
+                                   if (isImmersive) {
+                                       items(section.albums) { album ->
+                                            GoogleStyleImmersiveCard(album = album, onClick = { onAlbumClick(album) })
+                                       }
+                                   } else {
+                                       items(section.albums) { album ->
+                                            GoogleStyleAlbumCard(album = album, onClick = { onAlbumClick(album) })
+                                       }
+                                   }
+                              }
+                          }
+                      } // End if hasContent
+                   }
+                   }
+              
+              // Infinite Scroll Detection & Loading Indicator
+              if (!isHomeExhausted && onlineSections.isNotEmpty()) {
+                  item(key = "load_more_indicator") {
+                       Box(
+                       modifier = Modifier
+                           .fillMaxWidth()
+                           .padding(16.dp),
+                       contentAlignment = Alignment.Center
+                   ) {
+                       CircularProgressIndicator(
+                           modifier = Modifier.size(24.dp),
+                           strokeWidth = 2.dp,
+                           color = MaterialTheme.colorScheme.secondary
+                       )
+                  }
+              }
+             }
+
+        }
+
+
+        // Recently Added (Local Only)
+        if (!isOnlineMode && recentlyAddedSongs.isNotEmpty()) {
+            item(key = "recently_added_header") {
+                GoogleSectionHeader("Agregadas recientemente")
+            }
+            item(key = "recently_added_list") {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(
-                        items = recentlyAddedSongs,
-                        key = { it.id },
-                        contentType = { "song_card" }
+                        items = recentlyAddedSongs.take(10), // Limit to 10 items
+                        key = { it.id }
                     ) { song ->
-                        ModernSongCard(
-                            song = song,
-                            onClick = { onSongClick(song, recentlyAddedSongs) }
-                        )
+                        GoogleStyleCard(song) { onSongClick(song, recentlyAddedSongs) }
                     }
                 }
             }
         }
         
-        // Recently Played
-        if (recentlyPlayed.isNotEmpty()) {
+        // Recently Played (Local Only - fallback if offline)
+        if (!isOnlineMode && recentlyPlayed.isNotEmpty()) {
             item(key = "recent_header") {
-                Spacer(modifier = Modifier.height(24.dp))
-                ModernSectionHeader(
-                    title = "Escuchado recientemente",
-                    icon = Icons.Rounded.History,
-                    accentColor = MaterialTheme.colorScheme.secondary
-                )
+                GoogleSectionHeader("Escuchado recientemente")
             }
-            
-            item(key = "recent_row") {
+            item(key = "recent_list") {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(
                         items = recentlyPlayed.take(10),
-                        key = { "recent_${it.id}" },
-                        contentType = { "song_card" }
+                        key = { "recent_${it.id}" }
                     ) { song ->
-                        ModernSongCard(
-                            song = song,
-                            onClick = { onSongClick(song, recentlyPlayed) }
-                        )
+                        GoogleStyleCard(song) { onSongClick(song, recentlyPlayed) }
                     }
                 }
             }
         }
         
-        // Most Played
-        if (mostPlayed.isNotEmpty()) {
-            item(key = "mostplayed_header") {
-                Spacer(modifier = Modifier.height(24.dp))
-                ModernSectionHeader(
-                    title = "Lo más escuchado",
-                    icon = Icons.Rounded.TrendingUp,
-                    accentColor = MaterialTheme.colorScheme.primary
-                )
-            }
-            
-            item(key = "mostplayed_row") {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(
-                        items = mostPlayed.take(10),
-                        key = { "most_${it.id}" },
-                        contentType = { "song_card" }
-                    ) { song ->
-                        ModernSongCard(
-                            song = song,
-                            onClick = { onSongClick(song, mostPlayed) }
-                        )
-                    }
-                }
-            }
-        }
-        
-        // Albums
-        if (albums.isNotEmpty()) {
+        // Albums (Local Only)
+        if (!isOnlineMode && albums.isNotEmpty()) {
             item(key = "albums_header") {
-                Spacer(modifier = Modifier.height(24.dp))
-                ModernSectionHeader(
-                    title = "Tus álbumes",
-                    icon = Icons.Rounded.Album,
-                    accentColor = MaterialTheme.colorScheme.tertiary
-                )
+                GoogleSectionHeader("Tus álbumes")
             }
-            
-            item(key = "albums_row") {
+            item(key = "albums_list") {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(
                         items = albums.take(10),
-                        key = { "album_${it.id}" },
-                        contentType = { "album_card" }
+                        key = { "album_${it.id}" }
                     ) { album ->
-                        ModernAlbumCard(
-                            album = album,
-                            onClick = { onAlbumClick(album) }
-                        )
+                        GoogleStyleAlbumCard(album) { onAlbumClick(album) }
                     }
                 }
             }
         }
         
-        // Suggested for you
-        if (suggestedSongs.isNotEmpty()) {
+        // Suggested (Local Only)
+        if (!isOnlineMode && suggestedSongs.isNotEmpty()) {
             item(key = "suggested_header") {
-                Spacer(modifier = Modifier.height(24.dp))
-                ModernSectionHeader(
-                    title = "Sugerido para ti",
-                    icon = Icons.Rounded.AutoAwesome,
-                    accentColor = MaterialTheme.colorScheme.primary
-                )
+                GoogleSectionHeader("Sugerencias rápidas")
             }
-            
             items(
                 items = suggestedSongs,
                 key = { "suggested_${it.id}" }
             ) { song ->
-                ModernSuggestedItem(
-                    song = song,
-                    onClick = { onSongClick(song, suggestedSongs) }
-                )
+                GoogleStyleListItem(song, onClick = { onSongClick(song, suggestedSongs) })
             }
         }
         
-        // Empty state
+        // Empty State
         if (songs.isEmpty()) {
-            item(key = "empty") {
+            item(key = "empty_state") {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(48.dp),
+                    modifier = Modifier.fillMaxWidth().padding(48.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(96.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Rounded.MusicNote,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Text(
-                            text = "No hay música todavía",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Rounded.MusicNote,
+                            null,
+                            modifier = Modifier.size(64.dp),
+                            tint = colorScheme.primary.copy(alpha = 0.5f)
                         )
+                        Spacer(Modifier.height(16.dp))
                         Text(
-                            text = "Agrega música a tu dispositivo para comenzar",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            "Tu música aparecerá aquí",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
         }
-        
-        item(key = "bottom_spacer") {
-            Spacer(modifier = Modifier.height(24.dp))
-        }
     }
 }
 
 @Composable
-private fun ModernSectionHeader(
-    title: String,
-    icon: ImageVector,
-    accentColor: Color,
-    modifier: Modifier = Modifier
+private fun GoogleSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(start = 24.dp, top = 12.dp, bottom = 12.dp) // Reduced spacing
+    )
+}
+
+@Composable
+private fun ActionChip(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val isGlassy = MaterialTheme.colorScheme.background == Color.Transparent
+    
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp), // Slightly rounded square-ish pill
+        color = if (isGlassy) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp, 
+            color = if (isGlassy) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        )
     ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(accentColor.copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Icon(
-                imageVector = icon,
+                icon,
                 contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.ExtraBold
-        )
     }
 }
 
 @Composable
-private fun ModernSongCard(
+private fun GoogleStyleCard(
     song: Song,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onClick: () -> Unit
 ) {
     Column(
-        modifier = modifier
-            .width(150.dp)
-            .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.Start
+        modifier = Modifier
+            .width(140.dp) // Slightly narrower
+            .clickable(onClick = onClick)
     ) {
-        ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
+        // Image Container
+        Surface(
             shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.aspectRatio(1f)
         ) {
-            Box {
-                val context = androidx.compose.ui.platform.LocalContext.current
-                val imageRequest = androidx.compose.runtime.remember(song.albumArtUri) {
-                    coil.request.ImageRequest.Builder(context)
-                        .data(song.albumArtUri)
-                        .crossfade(true)
-                        .size(300)
-                        .build()
-                }
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = song.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                    .data(song.albumArtUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
         }
         
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         
+        // Text (No container)
         Text(
             text = song.title,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            fontWeight = FontWeight.Medium,
+            maxLines = 2, // Allow 2 lines
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
         )
         Text(
             text = song.artist,
@@ -541,48 +559,58 @@ private fun ModernSongCard(
 }
 
 @Composable
-private fun ModernAlbumCard(
+private fun GoogleStyleAlbumCard(
     album: Album,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onClick: () -> Unit
 ) {
     Column(
-        modifier = modifier
-            .width(150.dp)
-            .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.Start
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick)
     ) {
-        ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
+        Surface(
             shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.aspectRatio(1f)
         ) {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            val imageRequest = androidx.compose.runtime.remember(album.artworkUri) {
-                coil.request.ImageRequest.Builder(context)
-                    .data(album.artworkUri)
-                    .crossfade(true)
-                    .size(300)
-                    .build()
+            if (album.artworkUri != null) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(album.artworkUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            MaterialTheme.colorScheme.surfaceContainer.copy(alpha = if (MaterialTheme.colorScheme.background == Color.Transparent) 0.1f else 1f)
+                        )
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = album.name.take(2).uppercase(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
-            AsyncImage(
-                model = imageRequest,
-                contentDescription = album.name,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
         }
         
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         
         Text(
             text = album.name,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
         )
         Text(
             text = album.artist,
@@ -595,78 +623,328 @@ private fun ModernAlbumCard(
 }
 
 @Composable
-private fun ModernSuggestedItem(
+private fun GoogleStyleListItem(
     song: Song,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onDownloadClick: () -> Unit = {},
+    onClick: () -> Unit
 ) {
-    ElevatedCard(
-        onClick = onClick,
-        modifier = modifier
+    var showMenu by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
-            .border(
-                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                RoundedCornerShape(14.dp)
-            ),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+            .clickable(onClick = onClick)
+            .padding(start = 24.dp, top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.size(48.dp)
         ) {
-            ElevatedCard(
-                modifier = Modifier.size(60.dp),
-                shape = RoundedCornerShape(10.dp),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
-            ) {
-                AsyncImage(
-                    model = song.albumArtUri,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-            
-            Spacer(modifier = Modifier.width(14.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = song.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${song.artist} • ${song.album}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            
-            FilledIconButton(
-                onClick = onClick,
-                modifier = Modifier.size(40.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                    .data(song.albumArtUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        
+        Spacer(Modifier.width(16.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "${song.artist} • ${song.album}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        
+        Spacer(Modifier.width(16.dp))
+        
+        // 3-Dots Menu
+        Box(modifier = Modifier.offset(x = 8.dp)) {
+            IconButton(
+                onClick = { showMenu = true },
+                modifier = Modifier.size(24.dp)
             ) {
                 Icon(
-                    Icons.Rounded.PlayArrow,
-                    contentDescription = "Reproducir",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(20.dp)
+                    Icons.Rounded.MoreVert,
+                    contentDescription = "Opciones",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Descargar") },
+                    onClick = { 
+                        showMenu = false
+                        onDownloadClick()
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Download, contentDescription = null)
+                    }
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun GoogleStyleWideCard(
+    song: Song,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth() // adjusted to fill container
+            .clickable(onClick = onClick)
+            .padding(end = 8.dp), // reduced padding
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.size(64.dp) // Bigger image (was 56)
+        ) {
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                    .data(song.albumArtUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        
+        Spacer(Modifier.width(16.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.titleSmall, // Bigger font
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = song.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        
+        // Removed Play Button to reduce clutter and making the whole card feel clickable like YTM
+    }
+}
+
+@Composable
+private fun GoogleStyleArtistCard(
+    artist: Artist,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.aspectRatio(1f)
+        ) {
+            AsyncImage(
+                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                    .data(artist.imageUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        
+        Spacer(Modifier.height(8.dp))
+        
+        Text(
+            text = artist.name,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+@Composable
+private fun GoogleStyleImmersiveCard(
+    album: Album,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(180.dp) // Large width
+            .clickable(onClick = onClick)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .size(180.dp) // Large Square
+                .shadow(8.dp, RoundedCornerShape(12.dp), spotColor = MaterialTheme.colorScheme.primary)
+        ) {
+            if (album.artworkUri != null) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(album.artworkUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.tertiary
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = album.name.take(1).uppercase(),
+                        style = MaterialTheme.typography.displayMedium,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+            
+            // Gradient Overlay for text readability if title is overlay? No, we put title below.
+            // But let's add a subtle "Play" icon overlay
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.3f))
+                    )
+                ),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                 Icon(
+                     imageVector = Icons.Rounded.PlayArrow,
+                     contentDescription = null,
+                     tint = Color.White,
+                     modifier = Modifier.padding(12.dp).size(32.dp)
+                 )
+            }
+        }
+        
+        Spacer(Modifier.height(8.dp))
+        
+        Text(
+            text = album.name,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = album.artist,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+@Composable
+private fun GoogleStylePlaylistCard(
+    playlist: com.amurayada.music.data.model.Playlist,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.aspectRatio(1f)
+        ) {
+            if (playlist.artworkUri != null) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(playlist.artworkUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.QueueMusic,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(8.dp))
+        
+        Text(
+            text = playlist.name,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = playlist.author ?: "Playlist",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

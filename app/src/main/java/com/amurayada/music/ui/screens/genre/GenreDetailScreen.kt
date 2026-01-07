@@ -45,6 +45,8 @@ fun GenreDetailScreen(
     // Static gradient for now, or could be random/based on first song art
     val gradientColor = MaterialTheme.colorScheme.primary
     
+    val isGlassy = MaterialTheme.colorScheme.background == Color.Transparent
+    
     Box(modifier = modifier.fillMaxSize()) {
         // Gradient background
         Box(
@@ -52,8 +54,8 @@ fun GenreDetailScreen(
                 .fillMaxSize()
                 .background(
                     Brush.linearGradient(
-                        0f to gradientColor.copy(alpha = 0.6f),
-                        0.7f to Color.Black
+                        0f to gradientColor.copy(alpha = if (isGlassy) 0.2f else 0.6f),
+                        0.7f to (if (isGlassy) Color.Transparent else Color.Black)
                     )
                 )
         )

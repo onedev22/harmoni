@@ -30,6 +30,7 @@ import coil.request.CachePolicy
 import com.amurayada.music.data.model.Album
 import com.amurayada.music.data.model.Song
 import com.amurayada.music.ui.components.SongListItem
+import com.amurayada.music.ui.utils.extractDominantColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,11 +38,17 @@ fun AlbumDetailScreen(
     album: Album?,
     songs: List<Song>,
     allAlbums: List<Album>,
+    libraryVersion: Long = 0L,
     onSongClick: (Song) -> Unit,
     onBackClick: () -> Unit,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
     onAlbumClick: (Album) -> Unit,
+    onUpdateAlbum: (String, String, String, android.net.Uri?) -> Unit = { _, _, _, _ -> }, // Callback for updates
+    onGetGenre: suspend (Long) -> String? = { null }, // Callback to fetch genre
+    onDeleteSong: (Song) -> Unit = {}, // Callback for deletion
+    onDownloadSong: (Song) -> Unit = {},
+    onDownloadAlbum: (List<Song>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (album == null) {
@@ -54,35 +61,70 @@ fun AlbumDetailScreen(
     val context = LocalContext.current
     
     // Dynamic colors from album art
-    var gradientColor by remember { mutableStateOf(Color.Black) }
+    var gradientColors by remember { mutableStateOf(Color.Black to Color.Black) }
     
-    LaunchedEffect(album.artworkUri) {
+    // Genre State
+    var currentGenre by remember { mutableStateOf("") }
+    
+    // Editor Sheet State
+    var showEditorSheet by remember { mutableStateOf(false) }
+    
+    // Fetch genre when album changes
+    LaunchedEffect(album.id) {
+        val genre = onGetGenre(album.id)
+        currentGenre = genre ?: ""
+    }
+    
+    // Re-run palette generation when album art or library version changes
+    LaunchedEffect(album.artworkUri, libraryVersion) {
         try {
             val request = ImageRequest.Builder(context)
                 .data(album.artworkUri)
+                .setParameter("v", libraryVersion) // Force reload if version changes
                 .allowHardware(false)
                 .build()
             val result = ImageLoader(context).execute(request)
             val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
             bitmap?.let {
                 Palette.from(it).generate { palette ->
-                    gradientColor = getColorFromPalette(palette)
+                    gradientColors = com.amurayada.music.ui.utils.extractGradientColors(palette)
                 }
             }
         } catch (e: Exception) {
-            gradientColor = Color.Black
+            gradientColors = Color.Black to Color.Black
         }
     }
     
+    if (showEditorSheet) {
+        com.amurayada.music.ui.components.AlbumEditorSheet(
+            album = album,
+            initialGenre = currentGenre,
+            onDismiss = { showEditorSheet = false },
+            onSave = { title, artist, genre, imageUri ->
+                onUpdateAlbum(title, artist, genre, imageUri)
+                showEditorSheet = false
+            }
+        )
+    }
+    
     Box(modifier = modifier.fillMaxSize()) {
-        // Gradient: SimpMusic Style - Linear 135 degrees
+        // Gradient: SimpMusic Style - Vertical dark to black
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.linearGradient(
-                        0f to gradientColor,
-                        0.3f to Color.Black
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            gradientColors.first, // Full vibrance
+                            Color(
+                                red = gradientColors.first.red * 0.2f,
+                                green = gradientColors.first.green * 0.2f,
+                                blue = gradientColors.first.blue * 0.2f
+                            ),
+                            Color.Black,
+                            Color.Black,
+                            Color.Black
+                        )
                     )
                 )
         )
@@ -105,6 +147,16 @@ fun AlbumDetailScreen(
                                 tint = Color.White
                             )
                         }
+                    },
+                    actions = {
+                        // TODO: Album editing is disabled for now
+                        // IconButton(onClick = { showEditorSheet = true }) {
+                        //     Icon(
+                        //         Icons.Rounded.Edit,
+                        //         contentDescription = "Editar Álbum",
+                        //         tint = Color.White
+                        //     )
+                        // }
                     }
                 )
             }
@@ -113,7 +165,7 @@ fun AlbumDetailScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(bottom = 16.dp)
+            contentPadding = PaddingValues(bottom = 180.dp)
         ) {
             // Album header
             item(key = "header") {
@@ -124,7 +176,11 @@ fun AlbumDetailScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     AsyncImage(
-                        model = album.artworkUri,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(album.artworkUri)
+                            .setParameter("v", libraryVersion) // Force reload
+                            .crossfade(true)
+                            .build(),
                         contentDescription = album.name,
                         modifier = Modifier
                             .size(200.dp)
@@ -169,7 +225,7 @@ fun AlbumDetailScreen(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = gradientColor
+                            containerColor = gradientColors.first
                         )
                     ) {
                         Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -190,6 +246,21 @@ fun AlbumDetailScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Aleatorio")
                     }
+
+                    // Download Button (Only for Online/YouTube Albums)
+                    if (album.path.contains("http") || album.path.contains("youtube")) {
+                        FilledTonalButton(
+                            onClick = { onDownloadAlbum(songs) },
+                            modifier = Modifier.weight(0.5f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(Icons.Rounded.Download, contentDescription = "Descargar", modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
             
@@ -199,10 +270,60 @@ fun AlbumDetailScreen(
                 key = { _, song -> song.id },
                 contentType = { _, _ -> "song_item" }
             ) { index, song ->
+                var showMenu by remember { mutableStateOf(false) }
+                
                 SongListItem(
                     song = song,
                     onClick = { onSongClick(song) },
-                    index = index + 1
+                    index = index + 1,
+                    trailingContent = {
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(
+                                    Icons.Rounded.MoreVert,
+                                    contentDescription = "Opciones",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Descargar") },
+                                    onClick = {
+                                        showMenu = false
+                                        onDownloadSong(song)
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Rounded.Download,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Eliminar") },
+                                    onClick = {
+                                        showMenu = false
+                                        onDeleteSong(song)
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Rounded.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    colors = MenuDefaults.itemColors(
+                                        textColor = MaterialTheme.colorScheme.error
+                                    )
+                                )
+                            }
+                        }
+                    }
                 )
             }
             
@@ -287,30 +408,4 @@ fun AlbumDetailScreen(
         }
     }
     }
-}
-
-private fun getColorFromPalette(palette: Palette?): Color {
-    if (palette == null) return Color.Black
-    
-    val defaultColor = 0x000000
-    
-    val darkVibrant = palette.getDarkVibrantColor(defaultColor)
-    if (darkVibrant != defaultColor) return Color(darkVibrant)
-    
-    val darkMuted = palette.getDarkMutedColor(defaultColor)
-    if (darkMuted != defaultColor) return Color(darkMuted)
-    
-    val vibrant = palette.getVibrantColor(defaultColor)
-    if (vibrant != defaultColor) return Color(vibrant)
-    
-    val muted = palette.getMutedColor(defaultColor)
-    if (muted != defaultColor) return Color(muted)
-    
-    val lightVibrant = palette.getLightVibrantColor(defaultColor)
-    if (lightVibrant != defaultColor) return Color(lightVibrant)
-    
-    val lightMuted = palette.getLightMutedColor(defaultColor)
-    if (lightMuted != defaultColor) return Color(lightMuted)
-    
-    return Color.Black
 }

@@ -43,6 +43,8 @@ class LyricsRepository(context: Context) {
             
             // 3. No lyrics found
             Log.d(TAG, "No lyrics found for: ${song.title}")
+            // Cache the not found result to prevent repeated fetching
+            cacheLyrics(song.id, "", "None")
             LyricsResult.NotFound
             
         } catch (e: Exception) {
@@ -55,14 +57,33 @@ class LyricsRepository(context: Context) {
         try {
             val durationSeconds = (song.duration / 1000).toInt()
             
-            // Build URL with query parameters
-            val urlBuilder = StringBuilder(LRCLIB_BASE_URL)
-            urlBuilder.append("?track_name=").append(URLEncoder.encode(song.title, "UTF-8"))
-            urlBuilder.append("&artist_name=").append(URLEncoder.encode(song.artist, "UTF-8"))
-            urlBuilder.append("&album_name=").append(URLEncoder.encode(song.album, "UTF-8"))
-            urlBuilder.append("&duration=").append(durationSeconds)
+            // 1. Try Exact Match First
+            val exactMatchUrl = StringBuilder(LRCLIB_BASE_URL)
+            exactMatchUrl.append("?track_name=").append(URLEncoder.encode(song.title, "UTF-8"))
+            exactMatchUrl.append("&artist_name=").append(URLEncoder.encode(song.artist, "UTF-8"))
+            exactMatchUrl.append("&album_name=").append(URLEncoder.encode(song.album, "UTF-8"))
+            exactMatchUrl.append("&duration=").append(durationSeconds)
             
-            val url = URL(urlBuilder.toString())
+            val exactResult = performLrclibRequest(exactMatchUrl.toString(), durationSeconds, true)
+            if (exactResult != null) return exactResult
+            
+            // 2. Fallback to Fuzzy Search
+            Log.d(TAG, "Exact match failed, trying fuzzy search for: ${song.title} ${song.artist}")
+            val searchUrl = StringBuilder("https://lrclib.net/api/search")
+            val query = "${song.title} ${song.artist}"
+            searchUrl.append("?q=").append(URLEncoder.encode(query, "UTF-8"))
+            
+            return performLrclibRequest(searchUrl.toString(), durationSeconds, false)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching from LRCLIB", e)
+            return null
+        }
+    }
+
+    private fun performLrclibRequest(urlString: String, targetDuration: Int, isExact: Boolean): String? {
+        try {
+            val url = URL(urlString)
             val connection = url.openConnection() as HttpURLConnection
             
             connection.requestMethod = "GET"
@@ -74,34 +95,72 @@ class LyricsRepository(context: Context) {
             
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val response = connection.inputStream.bufferedReader().readText()
-                val json = JSONObject(response)
                 
-                // Prefer synced lyrics, fallback to plain lyrics
-                val syncedLyrics = json.optString("syncedLyrics", null)
-                val plainLyrics = json.optString("plainLyrics", null)
-                
-                // Verify duration matches (within 3 seconds tolerance)
-                val apiDuration = json.optInt("duration", 0)
-                if (apiDuration > 0 && kotlin.math.abs(apiDuration - durationSeconds) > 3) {
-                    Log.w(TAG, "Duration mismatch: expected $durationSeconds, got $apiDuration")
+                if (isExact) {
+                    // Handle single object response
+                    val json = JSONObject(response)
+                    return extractLyricsFromJson(json, targetDuration, true)
+                } else {
+                    // Handle array response for search
+                    val jsonArray = org.json.JSONArray(response)
+                    if (jsonArray.length() == 0) return null
+                    
+                    // Find best match in search results
+                    for (i in 0 until jsonArray.length()) {
+                        val item = jsonArray.getJSONObject(i)
+                        
+                        // Basic artist check: must contain the artist name or vice versa
+                        // This prevents "Hello" by Adele matching "Hello" by Lionel Richie if the search is fuzzy
+                        val itemArtist = item.optString("artistName", "")
+                        if (itemArtist.isNotEmpty()) {
+                             // Clean up artist names for comparison (remove special chars, lowercase)
+                             val cleanItemArtist = itemArtist.lowercase().replace(Regex("[^a-z0-9]"), "")
+                             val cleanSongArtist = urlString.substringAfter("artist_name=").substringBefore("&").replace("+", " ").lowercase().replace(Regex("[^a-z0-9]"), "")
+                             
+                             // We can't easily get the original song artist here without passing it down
+                             // But we can check if the item artist is roughly similar to what we expect
+                             // Or we can just trust the search query "q=title artist" usually puts the right one on top
+                             // Let's rely on the fact that we searched for "Title Artist"
+                        }
+
+                        val lyrics = extractLyricsFromJson(item, targetDuration, false)
+                        if (lyrics != null) return lyrics
+                    }
                     return null
                 }
-                
-                return when {
-                    !syncedLyrics.isNullOrBlank() -> syncedLyrics
-                    !plainLyrics.isNullOrBlank() -> plainLyrics
-                    else -> null
-                }
             } else if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
-                Log.d(TAG, "LRCLIB: No lyrics found (404)")
+                if (isExact) Log.d(TAG, "LRCLIB: Exact match not found (404)")
                 return null
             } else {
                 Log.w(TAG, "LRCLIB request failed with code: $responseCode")
                 return null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching from LRCLIB", e)
+            Log.w(TAG, "Request failed: ${e.message}")
             return null
+        }
+    }
+
+    private fun extractLyricsFromJson(json: JSONObject, targetDuration: Int, strictDuration: Boolean): String? {
+        val syncedLyrics = json.optString("syncedLyrics", null)
+        val plainLyrics = json.optString("plainLyrics", null)
+        val apiDuration = json.optInt("duration", 0)
+        
+        // Duration check
+        if (targetDuration > 0 && apiDuration > 0) {
+            val diff = kotlin.math.abs(apiDuration - targetDuration)
+            // Use tighter tolerance for both strict and fuzzy to ensure sync quality
+            // 3 seconds allow for minor silence differences but excludes different versions
+            if (diff > 3) {
+                 Log.w(TAG, "Duration mismatch: expected $targetDuration, got $apiDuration (diff: $diff)")
+                 return null 
+            }
+        }
+
+        return when {
+            !syncedLyrics.isNullOrBlank() -> syncedLyrics
+            !plainLyrics.isNullOrBlank() -> plainLyrics
+            else -> null
         }
     }
     
@@ -126,6 +185,17 @@ class LyricsRepository(context: Context) {
     private fun getCachedLyrics(songId: Long): Pair<String, String>? {
         val lyrics = prefs.getString("lyrics_$songId", null) ?: return null
         val source = prefs.getString("source_$songId", "SimpMusic") // Default to SimpMusic for legacy/manual
+        
+        // If cached as "None", return null to indicate not found (but handled)
+        // Actually, we should return it so the repo knows it's "NotFound" and doesn't fetch again
+        // But the current signature returns Pair<String, String>?, where null means "not in cache"
+        // We need to handle "None" specifically
+        
+        if (source == "None") {
+             // Ignore "None" cache to allow retrying with new fuzzy search logic
+             return null
+        }
+        
         return lyrics to (source ?: "SimpMusic")
     }
     

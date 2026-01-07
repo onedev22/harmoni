@@ -1,0 +1,167 @@
+
+    // Direct InnerTube Search Implementation
+    private fun searchYtmDirect(query: String, params: String): List<Any> {
+        try {
+            val apiUrl = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
+            
+            // Minimal payload for speed
+            val requestBody = """
+                {
+                    "context": {
+                        "client": {
+                            "clientName": "WEB_REMIX",
+                            "clientVersion": "1.20231204.01.00",
+                            "hl": "es",
+                            "gl": "CO"
+                        }
+                    },
+                    "query": "$query",
+                    "params": "$params"
+                }
+            """.trimIndent()
+            
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val body = requestBody.toRequestBody(mediaType)
+            
+            val request = okhttp3.Request.Builder()
+                .url(apiUrl)
+                .post(body)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Referer", "https://music.youtube.com/")
+                .header("Origin", "https://music.youtube.com")
+                .header("x-youtube-client-name", "67")
+                .header("x-youtube-client-version", "5.39.52")
+                .build()
+            
+            val client = com.amurayada.music.data.newpipe.NewPipeDownloader.getClient()
+            val response = client.newCall(request).execute()
+            
+            if (!response.isSuccessful) {
+                android.util.Log.e("SearchRepository", "YTM Direct API error: ${response.code}")
+                response.close()
+                return emptyList()
+            }
+            
+            val responseString = response.body?.string() ?: ""
+            return parseYtmSearchResponse(responseString)
+            
+        } catch (e: Exception) {
+            android.util.Log.e("SearchRepository", "Error in direct YTM search", e)
+            return emptyList()
+        }
+    }
+
+    private fun parseYtmSearchResponse(jsonString: String): List<Any> {
+        val results = mutableListOf<Any>()
+        try {
+            val json = org.json.JSONObject(jsonString)
+            val contents = json.optJSONObject("contents")
+                ?.optJSONObject("tabbedSearchResultsRenderer")
+                ?.optJSONArray("tabs")?.optJSONObject(0)
+                ?.optJSONObject("tabRenderer")?.optJSONObject("content")
+                ?.optJSONObject("sectionListRenderer")?.optJSONArray("contents")
+            
+            if (contents != null) {
+                for (i in 0 until contents.length()) {
+                    val shelf = contents.optJSONObject(i)?.optJSONObject("musicShelfRenderer")
+                    val items = shelf?.optJSONArray("contents")
+                    
+                    if (items != null) {
+                        for (j in 0 until items.length()) {
+                            val item = items.optJSONObject(j)?.optJSONObject("musicResponsiveListItemRenderer")
+                            if (item != null) {
+                                val flexColumns = item.optJSONArray("flexColumns")
+                                if (flexColumns == null || flexColumns.length() == 0) continue
+                                
+                                // Title
+                                val title = flexColumns.optJSONObject(0)
+                                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                                    ?.optJSONObject("text")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: continue
+
+                                // Subtitle (Artist, Album, etc.)
+                                val subtitleRuns = flexColumns.optJSONObject(1)
+                                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                                    ?.optJSONObject("text")?.optJSONArray("runs")
+                                
+                                var artistName = "Unknown"
+                                var albumName = ""
+                                if (subtitleRuns != null) {
+                                    // Usually: Artist • Album • Year
+                                    // Or just: Artist
+                                    for (k in 0 until subtitleRuns.length()) {
+                                        val text = subtitleRuns.optJSONObject(k)?.optString("text")
+                                        // Skip delimiters like " • "
+                                        if (text == " • ") continue
+                                        
+                                        // Heuristic: First non-delimiter is Artist
+                                        if (artistName == "Unknown") {
+                                            artistName = text ?: "Unknown"
+                                        } else if (albumName.isEmpty()) {
+                                            albumName = text ?: ""
+                                        }
+                                    }
+                                }
+                                
+                                // ID
+                                val playlistItemData = item.optJSONObject("playlistItemData")
+                                val videoId = playlistItemData?.optString("videoId")
+                                val navigationEndpoint = item.optJSONObject("navigationEndpoint")
+                                val browseId = navigationEndpoint?.optJSONObject("browseEndpoint")?.optString("browseId")
+                                
+                                // Thumbnail
+                                val thumbnails = item.optJSONObject("thumbnail")?.optJSONObject("musicThumbnailRenderer")
+                                    ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+                                
+                                var thumbnail = ""
+                                if (thumbnails != null && thumbnails.length() > 0) {
+                                    thumbnail = thumbnails.optJSONObject(thumbnails.length() - 1)?.optString("url") ?: ""
+                                    thumbnail = forceHighResThumbnail(thumbnail)
+                                }
+
+                                if (videoId != null && videoId.isNotEmpty()) {
+                                    // It's a Song (or Video)
+                                    results.add(Song(
+                                        id = videoId.hashCode().toLong(),
+                                        title = title,
+                                        artist = artistName,
+                                        album = if (albumName.isNotEmpty()) albumName else "YouTube Music",
+                                        duration = 0L, // Duration is harder to parse from runs here without more logic, skipping for speed
+                                        albumArtUri = if (thumbnail.isNotEmpty()) android.net.Uri.parse(thumbnail) else null,
+                                        path = "https://music.youtube.com/watch?v=$videoId",
+                                        dateAdded = System.currentTimeMillis(),
+                                        albumId = 0
+                                    ))
+                                } else if (browseId != null) {
+                                    if (browseId.startsWith("UC")) {
+                                        // Artist
+                                        results.add(Artist(
+                                            id = browseId.hashCode().toLong(),
+                                            name = title,
+                                            albumCount = 0,
+                                            songCount = 0, // Subscriber count not always available in search list
+                                            path = "https://music.youtube.com/channel/$browseId",
+                                            imageUrl = if (thumbnail.isNotEmpty()) thumbnail else null
+                                        ))
+                                    } else if (browseId.startsWith("MPREb_")) {
+                                        // Album
+                                        results.add(Album(
+                                            id = browseId.hashCode().toLong(),
+                                            name = title,
+                                            artist = artistName,
+                                            artworkUri = if (thumbnail.isNotEmpty()) android.net.Uri.parse(thumbnail) else null,
+                                            year = 0,
+                                            songCount = 0,
+                                            path = "https://music.youtube.com/browse/$browseId"
+                                        ))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return results
+    }

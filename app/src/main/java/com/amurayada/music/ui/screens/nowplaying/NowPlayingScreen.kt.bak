@@ -1,0 +1,1355 @@
+package com.amurayada.music.ui.screens.nowplaying
+
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import android.content.res.Configuration
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.palette.graphics.Palette
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.request.CachePolicy
+import com.amurayada.music.data.model.PlaybackMode
+import com.amurayada.music.data.model.PlaybackState
+import com.amurayada.music.data.model.Song
+import com.amurayada.music.ui.viewmodel.PlaybackViewModel
+import com.amurayada.music.ui.viewmodel.LyricsLoadingState
+import com.amurayada.music.data.model.CanvasResult
+import com.amurayada.music.ui.components.CanvasVideoPlayer
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NowPlayingScreen(
+    currentSong: Song?,
+    playbackState: PlaybackState,
+    currentPosition: Long,
+    playbackMode: PlaybackMode,
+    isFavorite: Boolean,
+    queue: List<Song> = emptyList(),
+    lyrics: String? = null,
+    lyricsSource: String? = null,
+    lyricsLoadingState: LyricsLoadingState = LyricsLoadingState.Idle,
+    sleepTimerDuration: Long? = null,
+    isSleepTimerRunning: Boolean = false,
+    onPlayPauseClick: () -> Unit,
+    onSkipNextClick: () -> Unit,
+    onSkipPreviousClick: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onShuffleClick: () -> Unit,
+    onRepeatClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    onBackClick: () -> Unit,
+    onQueueItemClick: (Song) -> Unit = {},
+    onSaveLyrics: (String) -> Unit = {},
+    onRetryLoadLyrics: () -> Unit = {},
+    onSearchLyrics: () -> Unit = {},
+    onImportLrc: (String) -> Unit = {},
+    onStartSleepTimer: (Int) -> Unit = {},
+    onCancelSleepTimer: () -> Unit = {},
+    onGoToAlbum: (Long) -> Unit = {},
+    onRemoveFromQueue: (Song) -> Unit = {},
+    onReorderQueue: (Int, Int) -> Unit = { _, _ -> },
+    onOpenHandsFree: () -> Unit = {},
+    onDownloadClick: (Song) -> Unit = {},
+    onEqualizerClick: () -> Unit = {},
+    videoState: PlaybackViewModel.VideoState = PlaybackViewModel.VideoState.AUDIO_ONLY,
+    canShowVideo: Boolean = false,
+    isVideoSizeValid: Boolean = false,
+    onToggleVideoMode: () -> Unit = {},
+    playerController: androidx.media3.session.MediaController? = null,
+    canvas: CanvasResult? = null,
+    fakeCanvasUrl: String? = null,
+    isCanvasEnabled: Boolean = false,
+    
+    isAmoledMode: Boolean = false,
+    playerBackgroundType: String = "auto",
+    playerBackgroundColor: Int? = null,
+    playerAlbumArtScale: Float = 1.0f,
+
+    customPrimaryColor: Int? = null,
+    applyBackgroundToPlayer: Boolean = false,
+    customBackgroundImageUri: String? = null,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    
+    val isInVideoMode = videoState == PlaybackViewModel.VideoState.VIDEO_READY
+    // We don't check isVideoSizeValid here anymore because we want the player to attach
+    // so it can REPORT the size. We will handle visibility in the layout.
+    val isCheckingVideo = videoState == PlaybackViewModel.VideoState.CHECKING
+    
+    // UI state for transition animations
+    val contentPadding = if (isInVideoMode && isVideoSizeValid) 0.dp else 40.dp
+    
+    if (currentSong == null) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.MusicNote,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                )
+                Text(
+                    text = "No hay música reproduciéndose",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+    
+    // Animated scale for album art
+    val infiniteTransition = rememberInfiniteTransition(label = "playing")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (playbackState is PlaybackState.Playing) 1.02f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = EaseInOutSine),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+    
+    // Dynamic colors from album art
+    var gradientColors by remember { mutableStateOf(Color.Black to Color.Black) }
+    val imageLoader = remember(context) { ImageLoader(context) }
+    
+    LaunchedEffect(currentSong.albumArtUri) {
+        try {
+            val request = ImageRequest.Builder(context)
+                .data(currentSong.albumArtUri)
+                .allowHardware(false)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .build()
+            val result = imageLoader.execute(request)
+            val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+            bitmap?.let {
+                Palette.from(it).generate { palette ->
+                    gradientColors = com.amurayada.music.ui.utils.extractGradientColors(palette)
+                }
+            }
+        } catch (e: Exception) {
+            gradientColors = Color.Black to Color.Black
+        }
+    }
+    
+    val effectivePrimaryColor = customPrimaryColor?.let { Color(it) } ?: gradientColors.first
+    
+    // Dialog states
+    var showQueueSheet by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showLyricsDialog by remember { mutableStateOf(false) }
+    var showSongInfoDialog by remember { mutableStateOf(false) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var showShareDialog by remember { mutableStateOf(false) }
+
+    if (showShareDialog) {
+        com.amurayada.music.ui.components.ShareDialog(
+            song = currentSong,
+            dominantColor = effectivePrimaryColor,
+            onDismiss = { showShareDialog = false }
+        )
+    }
+    
+    val lrcPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        uri?.let {
+            try {
+                context.contentResolver.openInputStream(it)?.use { inputStream ->
+                    val content = java.io.BufferedReader(java.io.InputStreamReader(inputStream)).readText()
+                    onImportLrc(content)
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+    var showSyncedLyrics by remember { mutableStateOf(false) }
+    var showFullLyrics by remember { mutableStateOf(false) }
+
+    NowPlayingScreenContent(
+        currentSong = currentSong,
+        playbackState = playbackState,
+        currentPosition = currentPosition,
+        playbackMode = playbackMode,
+        isFavorite = isFavorite,
+        effectivePrimaryColor = effectivePrimaryColor,
+        videoState = videoState,
+        canShowVideo = canShowVideo,
+        isVideoSizeValid = isVideoSizeValid,
+        playerController = playerController,
+        canvas = canvas,
+        fakeCanvasUrl = fakeCanvasUrl,
+        isCanvasEnabled = isCanvasEnabled,
+        isAmoledMode = isAmoledMode,
+        playerBackgroundType = playerBackgroundType,
+        playerBackgroundColor = playerBackgroundColor,
+        playerAlbumArtScale = playerAlbumArtScale,
+        applyBackgroundToPlayer = applyBackgroundToPlayer,
+        customBackgroundImageUri = customBackgroundImageUri,
+        scale = scale,
+        showSyncedLyrics = showSyncedLyrics,
+        lyrics = lyrics,
+        lyricsLoadingState = lyricsLoadingState,
+        isSleepTimerRunning = isSleepTimerRunning,
+        onBackClick = onBackClick,
+        onSkipNextClick = onSkipNextClick,
+        onSkipPreviousClick = onSkipPreviousClick,
+        onToggleVideoMode = onToggleVideoMode,
+        onRetryLoadLyrics = onRetryLoadLyrics,
+        onSearchLyrics = onSearchLyrics,
+        onShowFullLyrics = { showFullLyrics = true },
+        onShowMenu = { showMenu = true },
+        onEqualizerClick = onEqualizerClick,
+        onImportLrc = { lrcPicker.launch("*/*") },
+        onGoToAlbum = onGoToAlbum,
+        onShowSongInfoDialog = { showSongInfoDialog = true },
+        onDownloadClick = onDownloadClick,
+        onFavoriteClick = onFavoriteClick,
+        onSeek = onSeek,
+        onPlayPauseClick = onPlayPauseClick,
+        onShuffleClick = onShuffleClick,
+        onRepeatClick = onRepeatClick,
+        onToggleSyncedLyrics = { showSyncedLyrics = !showSyncedLyrics },
+        onShowSleepTimerDialog = { showSleepTimerDialog = true },
+        onShowShareDialog = { showShareDialog = true },
+        onShowQueueSheet = { showQueueSheet = true },
+        onOpenHandsFree = onOpenHandsFree,
+        modifier = modifier
+    )
+
+    // Full Screen Lyrics View
+    if (showFullLyrics) {
+        SyncedLyricsView(
+            lyrics = lyrics,
+            lyricsSource = lyricsSource,
+            currentPosition = currentPosition,
+            gradientColor = effectivePrimaryColor,
+            onClose = { showFullLyrics = false },
+            onSaveLyrics = { onSaveLyrics(it) },
+            onSkipPrevious = onSkipPreviousClick,
+            onSkipNext = onSkipNextClick
+        )
+    }
+
+    // Dialogs
+    if (showLyricsDialog) {
+        EditLyricsDialog(
+            initialLyrics = lyrics ?: "",
+            onDismiss = { showLyricsDialog = false },
+            onSave = { 
+                onSaveLyrics(it)
+                showLyricsDialog = false
+            }
+        )
+    }
+    
+    if (showSongInfoDialog) {
+        SongInfoDialog(
+            song = currentSong,
+            onDismiss = { showSongInfoDialog = false }
+        )
+    }
+    
+    if (showSleepTimerDialog) {
+        SleepTimerSheet(
+            isRunning = isSleepTimerRunning,
+            remainingTime = sleepTimerDuration,
+            onDismiss = { showSleepTimerDialog = false },
+            onStartTimer = { 
+                onStartSleepTimer(it)
+                showSleepTimerDialog = false
+            },
+            onCancelTimer = {
+                onCancelSleepTimer()
+                showSleepTimerDialog = false
+            }
+        )
+    }
+
+    // Queue bottom sheet - FUNCTIONAL
+    if (showQueueSheet) {
+        QueueSheet(
+            queue = queue,
+            currentSong = currentSong,
+            onDismissRequest = { showQueueSheet = false },
+            onQueueItemClick = onQueueItemClick,
+            onRemoveFromQueue = onRemoveFromQueue,
+            onReorderQueue = onReorderQueue
+        )
+    }
+}
+
+@Composable
+private fun NowPlayingScreenContent(
+    currentSong: Song,
+    playbackState: PlaybackState,
+    currentPosition: Long,
+    playbackMode: PlaybackMode,
+    isFavorite: Boolean,
+    effectivePrimaryColor: Color,
+    // Video / Canvas States
+    videoState: PlaybackViewModel.VideoState,
+    canShowVideo: Boolean,
+    isVideoSizeValid: Boolean,
+    playerController: androidx.media3.session.MediaController?,
+    canvas: CanvasResult?,
+    fakeCanvasUrl: String?,
+    isCanvasEnabled: Boolean,
+    // Background Config
+    isAmoledMode: Boolean,
+    playerBackgroundType: String,
+    playerBackgroundColor: Int?,
+    playerAlbumArtScale: Float,
+    applyBackgroundToPlayer: Boolean,
+    customBackgroundImageUri: String?,
+    // Animation/UI States
+    scale: Float,
+    showSyncedLyrics: Boolean,
+    lyrics: String?,
+    lyricsLoadingState: LyricsLoadingState,
+    isSleepTimerRunning: Boolean,
+    // Callbacks
+    onBackClick: () -> Unit,
+    onSkipNextClick: () -> Unit,
+    onSkipPreviousClick: () -> Unit,
+    onToggleVideoMode: () -> Unit,
+    onRetryLoadLyrics: () -> Unit,
+    onSearchLyrics: () -> Unit,
+    onShowFullLyrics: () -> Unit,
+    onShowMenu: () -> Unit,
+    onEqualizerClick: () -> Unit,
+    onImportLrc: () -> Unit,
+    onGoToAlbum: (Long) -> Unit,
+    onShowSongInfoDialog: () -> Unit,
+    onDownloadClick: (Song) -> Unit,
+    onFavoriteClick: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onPlayPauseClick: () -> Unit,
+    onShuffleClick: () -> Unit,
+    onRepeatClick: () -> Unit,
+    onToggleSyncedLyrics: () -> Unit,
+    onShowSleepTimerDialog: () -> Unit,
+    onShowShareDialog: () -> Unit,
+    onShowQueueSheet: () -> Unit,
+    onOpenHandsFree: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Animation State (Moved here)
+    val dismissOffsetY = remember { Animatable(0f) }
+    val dismissScale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    
+    // Gesture State for horizontal swipes
+    var horizontalDragOffset by remember { mutableStateOf(0f) }
+
+    val isInVideoMode = videoState == PlaybackViewModel.VideoState.VIDEO_READY
+    val isCheckingVideo = videoState == PlaybackViewModel.VideoState.CHECKING
+
+    // Canvas Logic (Background Layer)
+    val showFakeCanvas = isCanvasEnabled && canvas == null && fakeCanvasUrl != null && !isInVideoMode
+    val showCanvas = isCanvasEnabled && (canvas != null || showFakeCanvas) && !isInVideoMode
+
+    Box(modifier = modifier
+        .fillMaxSize()
+        .offset { IntOffset(0, dismissOffsetY.value.roundToInt()) }
+        .scale(dismissScale.value)
+        .pointerInput(Unit) {
+            detectDragGestures(
+                onDragEnd = {
+                    scope.launch {
+                        // Vertical Dismiss Logic
+                        if (dismissOffsetY.value > 300f) {
+                            // Dismiss
+                            launch { dismissOffsetY.animateTo(targetValue = 2000f, animationSpec = tween(300)) }
+                            onBackClick()
+                        } else {
+                            // Bounce back
+                            launch { dismissOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                            launch { dismissScale.animateTo(1f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                        }
+                        
+                        // Horizontal Swipe Logic
+                        if (kotlin.math.abs(horizontalDragOffset) > 100) {
+                            if (horizontalDragOffset > 0) onSkipPreviousClick() else onSkipNextClick()
+                        }
+                        horizontalDragOffset = 0f
+                    }
+                },
+                onDrag = { change, dragAmount ->
+                    change.consume()
+                    
+                    // Vertical Drag (Dismiss)
+                    if (dragAmount.y > 0 || dismissOffsetY.value > 0) {
+                        scope.launch {
+                            val newOffset = (dismissOffsetY.value + dragAmount.y).coerceAtLeast(0f)
+                            dismissOffsetY.snapTo(newOffset)
+                            // Scale down slightly as we drag down
+                            val progress = (newOffset / 1000f).coerceIn(0f, 1f)
+                            dismissScale.snapTo(1f - (progress * 0.1f))
+                        }
+                    }
+                    
+                    // Horizontal Drag (Skip) - Only if not dragging vertically significantly
+                    if (dismissOffsetY.value < 50f) {
+                        horizontalDragOffset += dragAmount.x
+                    }
+                }
+            )
+        }
+    ) {
+        // Background Logic Priority:
+        // 1. Custom App Background (Specific override)
+        // 2. AMOLED Mode (Theme preference)
+        // 4. Default Gradient/Blur (Default)
+
+        // Background rendering continues below - video is now rendered inline in album art area
+        // Background rendering continues below - video is now rendered inline in album art area
+        
+        // Canvas Layer (Background) - Only show if NOT in Video Mode (exclusive)
+        // Check for either real Canvas or verified Fake Canvas (YouTube)
+        NowPlayingBackground(
+            currentSong = currentSong,
+            canvas = canvas,
+            fakeCanvasUrl = fakeCanvasUrl,
+            isCanvasEnabled = isCanvasEnabled,
+            isInVideoMode = isInVideoMode,
+            isAmoledMode = isAmoledMode,
+            playerBackgroundType = playerBackgroundType,
+            playerBackgroundColor = playerBackgroundColor,
+            applyBackgroundToPlayer = applyBackgroundToPlayer,
+            customBackgroundImageUri = customBackgroundImageUri,
+            effectivePrimaryColor = effectivePrimaryColor,
+            modifier = Modifier
+        )
+        
+        // Layout Content
+        val configuration = LocalConfiguration.current
+        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+        if (isLandscape) {
+            NowPlayingLandscape(
+                currentSong = currentSong,
+                playbackState = playbackState,
+                currentPosition = currentPosition,
+                playbackMode = playbackMode,
+                isFavorite = isFavorite,
+                videoState = videoState,
+                canShowVideo = canShowVideo,
+                isVideoSizeValid = isVideoSizeValid, 
+                isCheckingVideo = isCheckingVideo,
+                isInVideoMode = isInVideoMode,
+                showCanvas = showCanvas,
+                playerController = playerController,
+                lyrics = lyrics,
+                showSyncedLyrics = showSyncedLyrics,
+                lyricsLoadingState = lyricsLoadingState,
+                isSleepTimerRunning = isSleepTimerRunning,
+                effectivePrimaryColor = effectivePrimaryColor,
+                scale = scale,
+                onBackClick = onBackClick,
+                onToggleVideoMode = onToggleVideoMode,
+                onShowMenu = onShowMenu,
+                onFavoriteClick = onFavoriteClick,
+                onSeek = onSeek,
+                onPlayPauseClick = onPlayPauseClick,
+                onSkipNextClick = onSkipNextClick,
+                onSkipPreviousClick = onSkipPreviousClick,
+                onShuffleClick = onShuffleClick,
+                onRepeatClick = onRepeatClick,
+                onToggleSyncedLyrics = onToggleSyncedLyrics,
+                onShowSleepTimerDialog = onShowSleepTimerDialog,
+                onShowShareDialog = onShowShareDialog,
+                onShowQueueSheet = onShowQueueSheet,
+                onOpenHandsFree = onOpenHandsFree,
+                onShowFullLyrics = onShowFullLyrics,
+                onRetryLoadLyrics = onRetryLoadLyrics,
+                onSearchLyrics = onSearchLyrics
+            )
+        } else {
+            NowPlayingPortrait(
+                currentSong = currentSong,
+                playbackState = playbackState,
+                currentPosition = currentPosition,
+                playbackMode = playbackMode,
+                isFavorite = isFavorite,
+                videoState = videoState,
+                canShowVideo = canShowVideo,
+                isVideoSizeValid = isVideoSizeValid,
+                isInVideoMode = isInVideoMode,
+                showCanvas = showCanvas,
+                playerController = playerController,
+                lyrics = lyrics,
+                showSyncedLyrics = showSyncedLyrics,
+                lyricsLoadingState = lyricsLoadingState,
+                isSleepTimerRunning = isSleepTimerRunning,
+                effectivePrimaryColor = effectivePrimaryColor,
+                playerAlbumArtScale = playerAlbumArtScale,
+                scale = scale,
+                onBackClick = onBackClick,
+                onToggleVideoMode = onToggleVideoMode,
+                onShowMenu = onShowMenu,
+                onFavoriteClick = onFavoriteClick,
+                onSeek = onSeek,
+                onPlayPauseClick = onPlayPauseClick,
+                onSkipNextClick = onSkipNextClick,
+                onSkipPreviousClick = onSkipPreviousClick,
+                onShuffleClick = onShuffleClick,
+                onRepeatClick = onRepeatClick,
+                onToggleSyncedLyrics = onToggleSyncedLyrics,
+                onShowSleepTimerDialog = onShowSleepTimerDialog,
+                onShowShareDialog = onShowShareDialog,
+                onShowQueueSheet = onShowQueueSheet,
+                onOpenHandsFree = onOpenHandsFree,
+                onShowFullLyrics = onShowFullLyrics,
+                onRetryLoadLyrics = onRetryLoadLyrics,
+                onSearchLyrics = onSearchLyrics
+            )
+        }
+        if (isLandscape) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(32.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left Side: Album Art / Lyrics
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!showSyncedLyrics && !isInVideoMode) {
+                        // Show Album Art Card
+                        Box(contentAlignment = Alignment.Center) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .aspectRatio(1f)
+                                    .scale(scale),
+                                shape = RoundedCornerShape(20.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 24.dp)
+                            ) {
+                                AsyncImage(
+                                    model = currentSong.albumArtUri,
+                                    contentDescription = "Portada del álbum",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            
+                            // Loader if checking or message if failed
+                                    // Loader if checking (optional, maybe remove if we want "silencio"?)
+                            // User said "NO cambia la UI aún" for checking. 
+                            // But usually manual toggle needs feedback. 
+                            if (isCheckingVideo) {
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .background(Color.Black.copy(alpha = 0.4f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        CircularProgressIndicator(color = Color.White)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text("Buscando video...", color = Color.White)
+                                    }
+                                }
+                            }
+                        }
+                    } else if (isInVideoMode && playerController != null) {
+                        // Show Video Player - Full Width, YouTube Music Style
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize(), // In Landscape, fill the entire left area
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    androidx.media3.ui.PlayerView(ctx).apply {
+                                        player = playerController
+                                        useController = false
+                                        resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    } else if (showSyncedLyrics) {
+                        // Show Lyrics with same container size as album art
+                        val parsedLyrics = remember(lyrics) { parseLyrics(lyrics) }
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.85f)
+                                .aspectRatio(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (parsedLyrics.isEmpty()) {
+                                LyricsEmptyState(
+                                    loadingState = lyricsLoadingState,
+                                    onRetry = onRetryLoadLyrics,
+                                    onSearchLyrics = onSearchLyrics
+                                )
+                            }
+                            else {
+                                // Show current and surrounding lines with animation
+                                val currentIndex = parsedLyrics.indexOfLast { it.timestamp <= currentPosition }
+                                
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    // Previous line (if exists)
+                                    if (currentIndex > 0) {
+                                        Text(
+                                            text = parsedLyrics[currentIndex - 1].text,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Normal,
+                                            color = Color.White.copy(alpha = 0.3f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .padding(vertical = 4.dp)
+                                                .scale(0.85f)
+                                        )
+                                    }
+                                    
+                                    // Current line - highlighted with animation
+                                    if (currentIndex >= 0 && currentIndex < parsedLyrics.size) {
+                                        Text(
+                                            text = parsedLyrics[currentIndex].text,
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .padding(vertical = 8.dp)
+                                                .scale(1.1f)
+                                                .animateContentSize()
+                                        )
+                                    } else if (parsedLyrics.isNotEmpty()) {
+                                        // Show first line when song hasn't started
+                                        Text(
+                                            text = parsedLyrics[0].text,
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White.copy(alpha = 0.6f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .padding(vertical = 8.dp)
+                                                .animateContentSize()
+                                        )
+                                    }
+                                    
+                                    // Next line (if exists)
+                                    if (currentIndex >= 0 && currentIndex + 1 < parsedLyrics.size) {
+                                        Text(
+                                            text = parsedLyrics[currentIndex + 1].text,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Normal,
+                                            color = Color.White.copy(alpha = 0.3f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .padding(vertical = 4.dp)
+                                                .scale(0.85f)
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // "Ver letra completa" button at bottom of container
+                            TextButton(
+                                onClick = onShowFullLyrics,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 12.dp)
+                            ) {
+                                Text(
+                                    "Ver letra completa",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Rounded.OpenInFull,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Right Side: Controls
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Top Bar
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        IconButton(
+                            onClick = onBackClick,
+                            modifier = Modifier.align(Alignment.CenterStart)
+                        ) {
+                            Icon(
+                                Icons.Rounded.KeyboardArrowDown,
+                                contentDescription = "Cerrar",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        SongVideoSwitcher(
+                            isVideoMode = videoState != PlaybackViewModel.VideoState.AUDIO_ONLY && videoState != PlaybackViewModel.VideoState.DISABLED,
+                            isVideoLoading = videoState == PlaybackViewModel.VideoState.CHECKING,
+                            canShowVideo = canShowVideo, // Just for info, unused inside
+                            enabled = canShowVideo && videoState != PlaybackViewModel.VideoState.DISABLED,
+                            onToggle = { onToggleVideoMode() },
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                        
+                        
+                        Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+                            IconButton(onClick = onShowMenu) {
+                                Icon(
+                                    Icons.Rounded.MoreVert,
+                                    contentDescription = "Más opciones",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            // Menu UI is handled by parent, this just triggers callback
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Controls
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Song Info with Favorite button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = currentSong.title,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = currentSong.artist,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = currentSong.album,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            
+                            IconButton(onClick = onFavoriteClick) {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                    contentDescription = if (isFavorite) "Quitar de favoritos" else "Agregar a favoritos",
+                                    tint = if (isFavorite) Color.Red else Color.White,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                        
+                        // Progress Slider
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Slider(
+                                value = currentPosition.toFloat(),
+                                onValueChange = { onSeek(it.toLong()) },
+                                valueRange = 0f..currentSong.duration.toFloat().coerceAtLeast(1f),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = effectivePrimaryColor,
+                                    activeTrackColor = effectivePrimaryColor,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                                )
+                            )
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = formatDuration(currentPosition),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.7f)
+                                )
+                                Text(
+                                    text = formatDuration(currentSong.duration),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                        
+                        // Playback Controls
+                        com.amurayada.music.ui.components.PlaybackControls(
+                            playbackState = playbackState,
+                            playbackMode = playbackMode,
+                            onPlayPauseClick = onPlayPauseClick,
+                            onSkipNextClick = onSkipNextClick,
+                            onSkipPreviousClick = onSkipPreviousClick,
+                            onShuffleClick = onShuffleClick,
+                            onRepeatClick = onRepeatClick,
+                            accentColor = effectivePrimaryColor
+                        )
+                        
+                        // Bottom Options Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onToggleSyncedLyrics) {
+                                Icon(
+                                    Icons.Rounded.Lyrics,
+                                    contentDescription = "Letra",
+                                    tint = if (showSyncedLyrics) effectivePrimaryColor else Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            
+                            IconButton(onClick = onShowSleepTimerDialog) {
+                                Icon(
+                                    Icons.Rounded.Bedtime,
+                                    contentDescription = "Temporizador",
+                                    tint = if (isSleepTimerRunning) effectivePrimaryColor else Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            
+                            IconButton(onClick = onShowShareDialog) {
+                                Icon(
+                                    Icons.Rounded.Share,
+                                    contentDescription = "Compartir",
+                                    tint = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            
+                            IconButton(onClick = onShowQueueSheet) {
+                                Icon(
+                                    Icons.Rounded.QueueMusic,
+                                    contentDescription = "Cola",
+                                    tint = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            
+                            IconButton(onClick = onOpenHandsFree) {
+                                Icon(
+                                    Icons.Rounded.DirectionsCar,
+                                    contentDescription = "Manos Libres",
+                                    tint = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+            ) {
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Top Bar
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    ) {
+                        Icon(
+                            Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = "Cerrar",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    
+                    SongVideoSwitcher(
+                        isVideoMode = videoState != PlaybackViewModel.VideoState.AUDIO_ONLY && videoState != PlaybackViewModel.VideoState.DISABLED,
+                        isVideoLoading = videoState == PlaybackViewModel.VideoState.CHECKING,
+                        canShowVideo = canShowVideo && videoState != PlaybackViewModel.VideoState.DISABLED,
+                        onToggle = { if (canShowVideo) onToggleVideoMode() },
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .zIndex(10f)
+                    )
+                    
+                    Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+                        IconButton(onClick = onShowMenu) {
+                            Icon(
+                                Icons.Rounded.MoreVert,
+                                    contentDescription = "Más opciones",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.weight(0.15f))
+                
+                // Album Art OR Lyrics OR Video (mutually exclusive)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+
+                    contentAlignment = Alignment.Center
+                ) {
+                    
+                    // Priority 1: Synced Lyrics
+                    if (showSyncedLyrics) {
+                        // Show Lyrics with same container size as album art
+                        val parsedLyrics = remember(lyrics) { parseLyrics(lyrics) }
+                        
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 40.dp)
+                                .fillMaxWidth(0.85f)
+                                .aspectRatio(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (parsedLyrics.isEmpty()) {
+                                LyricsEmptyState(
+                                    loadingState = lyricsLoadingState,
+                                    onRetry = onRetryLoadLyrics,
+                                    onSearchLyrics = onSearchLyrics
+                                )
+                            } else {
+                                // Show current and surrounding lines with animation
+                                val currentIndex = parsedLyrics.indexOfLast { it.timestamp <= currentPosition }
+                                
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    // Previous line (if exists)
+                                    if (currentIndex > 0) {
+                                        Text(
+                                            text = parsedLyrics[currentIndex - 1].text,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Normal,
+                                            color = Color.White.copy(alpha = 0.3f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .padding(vertical = 4.dp)
+                                                .scale(0.85f)
+                                        )
+                                    }
+                                    
+                                    // Current line - highlighted with animation
+                                    if (currentIndex >= 0 && currentIndex < parsedLyrics.size) {
+                                        Text(
+                                            text = parsedLyrics[currentIndex].text,
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .padding(vertical = 8.dp)
+                                                .scale(1.1f)
+                                                .animateContentSize()
+                                        )
+                                    } else if (parsedLyrics.isNotEmpty()) {
+                                        // Show first line when song hasn't started
+                                        Text(
+                                            text = parsedLyrics[0].text,
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White.copy(alpha = 0.6f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .padding(vertical = 8.dp)
+                                                .animateContentSize()
+                                        )
+                                    }
+                                    
+                                    // Next line (if exists)
+                                    if (currentIndex >= 0 && currentIndex + 1 < parsedLyrics.size) {
+                                        Text(
+                                            text = parsedLyrics[currentIndex + 1].text,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Normal,
+                                            color = Color.White.copy(alpha = 0.3f),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .padding(vertical = 4.dp)
+                                                .scale(0.85f)
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // "Ver letra completa" button at bottom of container
+                            TextButton(
+                                onClick = onShowFullLyrics,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 12.dp)
+                            ) {
+                                Text(
+                                    "Ver letra completa",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Rounded.OpenInFull,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        // Priority 2: Media Block
+                        // Unified structure to prevent flashing during transitions
+                        
+                        val isVideoActive = isInVideoMode || videoState == PlaybackViewModel.VideoState.CHECKING
+                        
+                        Box(contentAlignment = Alignment.Center) {
+                            // LAYER 1: Video Player (Base)
+                            // Always present if active to allow pre-loading behind art
+                            if (isVideoActive && playerController != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(16f / 9f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            androidx.media3.ui.PlayerView(ctx).apply {
+                                                player = playerController
+                                                useController = false
+                                                useArtwork = false
+                                                defaultArtwork = null
+                                                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                                setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                            }
+                                        },
+                                        update = { view ->
+                                            if (view.player != playerController) {
+                                                view.player = playerController
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize().background(Color.Transparent)
+                                    )
+                                }
+                            }
+                            
+                            // LAYER 2: Album Art (Overlay)
+                            // Visible if: 
+                            // 1. Audio Mode AND No Canvas
+                            // 2. Video Mode BUT Video not ready (Buffering/Loading) -> Acts as placeholder
+                            val showArt = (!isVideoActive && !showCanvas) || (isVideoActive && !isVideoSizeValid)
+                            
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = showArt,
+                                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)),
+                                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth() // CRITICAL: Standard container
+                                        .aspectRatio(1f) // Square
+                                        .padding(horizontal = 40.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val artSizeModifier = Modifier
+                                        .fillMaxWidth(0.85f)
+                                        .aspectRatio(1f)
+                                        
+                                    Card(
+                                        modifier = artSizeModifier
+                                            .scale(scale * playerAlbumArtScale),
+                                        shape = RoundedCornerShape(20.dp),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 24.dp)
+                                    ) {
+                                        AsyncImage(
+                                            model = currentSong.albumArtUri,
+                                            contentDescription = "Portada del álbum",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                
+                Spacer(modifier = Modifier.weight(0.2f))
+                
+                // Song Info with Favorite button
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = currentSong.title,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = currentSong.artist,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = currentSong.album,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.5f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    
+                    IconButton(onClick = onFavoriteClick) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Quitar de favoritos" else "Agregar a favoritos",
+                            tint = if (isFavorite) Color.Red else Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Progress Slider
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                    var isDragging by remember { mutableStateOf(false) }
+                    var dragPosition by remember { mutableStateOf(0f) }
+                    
+                    Slider(
+                        value = if (isDragging) dragPosition else currentPosition.toFloat(),
+                        onValueChange = { newValue -> 
+                            isDragging = true
+                            dragPosition = newValue 
+                        },
+                        onValueChangeFinished = {
+                            onSeek(dragPosition.toLong())
+                            isDragging = false
+                        },
+                        valueRange = 0f..currentSong.duration.toFloat().coerceAtLeast(1f),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = SliderDefaults.colors(
+                            thumbColor = effectivePrimaryColor,
+                            activeTrackColor = effectivePrimaryColor,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                        )
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = formatDuration(currentPosition),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = formatDuration(currentSong.duration),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Playback Controls
+                Box(modifier = Modifier.padding(horizontal = 24.dp)) {
+                    com.amurayada.music.ui.components.PlaybackControls(
+                        playbackState = playbackState,
+                        playbackMode = playbackMode,
+                        onPlayPauseClick = onPlayPauseClick,
+                        onSkipNextClick = onSkipNextClick,
+                        onSkipPreviousClick = onSkipPreviousClick,
+                        onShuffleClick = onShuffleClick,
+                        onRepeatClick = onRepeatClick,
+                        accentColor = effectivePrimaryColor
+                    )
+                }
+                
+                Spacer(modifier = Modifier.weight(0.15f))
+                    
+                    // Bottom Options Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onToggleSyncedLyrics) {
+                            Icon(
+                                Icons.Rounded.Lyrics,
+                                contentDescription = "Letra",
+                                tint = if (showSyncedLyrics) effectivePrimaryColor else Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        
+                        IconButton(onClick = onShowSleepTimerDialog) {
+                            Icon(
+                                Icons.Rounded.Bedtime,
+                                contentDescription = "Temporizador",
+                                tint = if (isSleepTimerRunning) effectivePrimaryColor else Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        
+                        IconButton(onClick = onShowShareDialog) {
+                            Icon(
+                                Icons.Rounded.Share,
+                                contentDescription = "Compartir",
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        
+                        IconButton(onClick = onShowQueueSheet) {
+                            Icon(
+                                Icons.Rounded.QueueMusic,
+                                contentDescription = "Cola",
+                                tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        
+                        IconButton(onClick = onOpenHandsFree) {
+                            Icon(
+                                Icons.Rounded.DirectionsCar,
+                                contentDescription = "Manos Libres",
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}

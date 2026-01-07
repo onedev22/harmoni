@@ -11,5 +11,6 @@ data class Album(
     val artist: String,
     val artworkUri: Uri?,
     val year: Int = 0,
-    val songCount: Int = 0
+    val songCount: Int = 0,
+    val path: String = ""
 )

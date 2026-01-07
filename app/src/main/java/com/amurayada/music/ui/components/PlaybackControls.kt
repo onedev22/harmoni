@@ -63,16 +63,31 @@ fun PlaybackControls(
                 containerColor = accentColor
             )
         ) {
-            Icon(
-                imageVector = if (playbackState is PlaybackState.Playing) {
-                    Icons.Rounded.Pause
-                } else {
-                    Icons.Rounded.PlayArrow
-                },
-                contentDescription = if (playbackState is PlaybackState.Playing) "Pausar" else "Reproducir",
-                tint = Color.White,
-                modifier = Modifier.size(40.dp)
-            )
+            when (playbackState) {
+                is PlaybackState.Loading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(36.dp),
+                        color = Color.White,
+                        strokeWidth = 3.dp
+                    )
+                }
+                is PlaybackState.Playing -> {
+                    Icon(
+                        imageVector = Icons.Rounded.Pause,
+                        contentDescription = "Pausar",
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+                else -> {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = "Reproducir",
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+            }
         }
         
         IconButton(

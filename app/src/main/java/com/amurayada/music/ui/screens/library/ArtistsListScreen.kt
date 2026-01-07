@@ -53,7 +53,7 @@ fun ArtistsListScreen(
     } else {
         LazyColumn(
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 100.dp, top = 8.dp)
+            contentPadding = PaddingValues(bottom = 180.dp, top = 8.dp)
         ) {
             items(artists, key = { it.id }, contentType = { "artist_item" }) { artist ->
                 ArtistListItem(

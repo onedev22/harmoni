@@ -4,8 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.amurayada.music.data.model.Playlist
@@ -41,20 +42,36 @@ fun PlaylistDetailScreen(
 
     var showAddSongDialog by remember { mutableStateOf(false) }
 
+    val isGlassy = MaterialTheme.colorScheme.background == androidx.compose.ui.graphics.Color.Transparent
+
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text(playlist.name) },
+            MediumTopAppBar(
+                title = { 
+                    Text(
+                        text = playlist.name
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     IconButton(onClick = { showAddSongDialog = true }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Songs")
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.mediumTopAppBarColors(
+                    containerColor = if (isGlassy) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = if (isGlassy) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surface
+                )
             )
         }
     ) { paddingValues ->
@@ -125,7 +142,8 @@ fun PlaylistDetailScreen(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 220.dp)
                 ) {
                     items(songs) { song ->
                         SongListItem(
@@ -147,7 +165,7 @@ fun PlaylistDetailScreen(
         }
         
         if (showAddSongDialog) {
-            com.amurayada.music.ui.components.SongSelectionDialog(
+            com.amurayada.music.ui.components.SongSelectionSheet(
                 allSongs = allSongs,
                 currentPlaylistSongIds = playlist.songIds,
                 onDismiss = { showAddSongDialog = false },

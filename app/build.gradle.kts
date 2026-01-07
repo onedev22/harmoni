@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 import java.util.Properties
@@ -21,10 +22,14 @@ android {
         applicationId = "com.amurayada.music"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     signingConfigs {
@@ -51,11 +56,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
         freeCompilerArgs = listOf(
             "-opt-in=kotlin.RequiresOptIn",
             "-Xjvm-default=all"
@@ -101,6 +106,9 @@ dependencies {
     implementation("androidx.media3:media3-session:1.2.0")
     implementation("androidx.media3:media3-ui:1.2.0")
     
+    // Media (Legacy support for MediaStyle notification)
+    implementation("androidx.media:media:1.7.0")
+    
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")
     
@@ -110,11 +118,29 @@ dependencies {
     // Accompanist for permissions
     implementation("com.google.accompanist:accompanist-permissions:0.33.2-alpha")
     
+    // Security for encrypted storage
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    
     // DataStore for preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     
+    // JAudioTagger for audio metadata editing
+    implementation("net.jthink:jaudiotagger:3.0.1")
+    
     // ProfileInstaller for baseline profiles
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+
+    // SimpMusic Architecture
+    implementation(libs.newpipe.extractor)
+    implementation(libs.youtubedl.android)
+    
+    // WorkManager for background downloads
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    
+    // Room for local database
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
     
     // Testing
     testImplementation(libs.junit)
@@ -123,5 +149,10 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    androidTestImplementation(libs.androidx.compose.ui.test.manifest)
+    
+    // OkHttp for HTTP/2 and standard networking
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    
+
 }

@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Harmoni</string>
+    <string name="notification_channel_name">Reproducción de Música</string>
 </resources>

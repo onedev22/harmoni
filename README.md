@@ -25,3 +25,4 @@ Nota: Al ser una app independiente (fuera de la Play Store), recuerda habilitar 
 
 Licencia
 Este proyecto hereda la licencia de SimpMusic (GPL-3.0). Eres libre de usarlo, modificarlo y compartirlo manteniendo la misma libertad para los demás.
+<img width="512" height="512" alt="ic_launcher-playstore" src="https://github.com/user-attachments/assets/8bcb12aa-d2c5-4121-8587-ab36a3628dcb" />

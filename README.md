@@ -8,7 +8,7 @@ Privacidad y Rendimiento: Sin telemetría pesada. Diseñado para ser rápido inc
 🛠️ 
 🏗️ Créditos y Base
 Este proyecto es una evolución y agradece profundamente a:
-SimpMusic de maxrave-dev por la base técnica excepcional.
+https://github.com/maxrave-dev/SimpMusic de maxrave-dev por la base técnica excepcional.
 La comunidad de Android Open Source por las librerías de soporte.
  
 Descargas

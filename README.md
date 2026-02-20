@@ -7,10 +7,7 @@
 <img width="1688" height="3252" alt="1770603053830_100" src="https://github.com/user-attachments/assets/6ad0c64b-559b-4d13-b1db-0841b5b96e80" />
 
 Harmoni 
-Harmoni es un reproductor de música moderno para Android que combina la potencia del streaming con la elegancia de una biblioteca local. Basado en el motor de SimpMusic, Harmoni ha sido rediseñado para ofrecer una experiencia más fluida, personalizada y enfocada en el usuario avanzado.
-🚀 Lo que hace a Harmoni diferente
-Arquitectura Media3: Implementación avanzada de la última suite de medios de Google, garantizando una reproducción sin cortes y una gestión de memoria optimizada.
-UI Dinámica con Compose: Interfaz construida 100% en Jetpack Compose, con soporte para colores dinámicos (Material You) que se adaptan a tu fondo de pantalla.
+Harmoni es un reproductor de música moderno para Android que combina la potencia del streaming con la elegancia de una biblioteca local. Basado en el motor de SimpMusic, Harmoni ha sido rediseñado para ofrecer una experiencia más fluida y personalizada
 Gestión de Notificaciones Robusta: Control total desde cualquier parte del sistema, con metadatos precisos y controles responsivos.
 Privacidad y Rendimiento: Sin telemetría pesada. Diseñado para ser rápido incluso en dispositivos con recursos moderados.
 🛠️ 

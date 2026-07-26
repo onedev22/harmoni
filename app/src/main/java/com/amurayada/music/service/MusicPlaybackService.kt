@@ -253,14 +253,14 @@ class MusicPlaybackService : MediaSessionService() {
                          // ¡ÉXITO! La reproducción inició, reseteamos todos los guardias
                         cancelPlaybackTimeout()
                         resetIdleRetryCounter()
-                        android.util.Log.d("MusicPlaybackService", "✅ Player READY - reproducción iniciada correctamente")
+                        android.util.Log.d("MusicPlaybackService", "Player READY - reproducción iniciada correctamente")
                     }
                     
                     Player.STATE_BUFFERING -> {
                         // Iniciamos cuenta regresiva de timeout al comenzar el buffering
                         if (player.playWhenReady) {
                             startPlaybackTimeout()
-                            android.util.Log.d("MusicPlaybackService", "⏳ Buffering... guardia de timeout activo")
+                            android.util.Log.d("MusicPlaybackService", "Buffering... guardia de timeout activo")
                         }
                     }
                     
@@ -277,11 +277,11 @@ class MusicPlaybackService : MediaSessionService() {
                             idleRetryCount++
                             
                             if (idleRetryCount <= MAX_IDLE_RETRIES) {
-                                android.util.Log.w("MusicPlaybackService", "🔄 WATCHDOG: Reintento IDLE $idleRetryCount/$MAX_IDLE_RETRIES - llamando prepare()")
+                                android.util.Log.w("MusicPlaybackService", " WATCHDOG: Reintento IDLE $idleRetryCount/$MAX_IDLE_RETRIES - llamando prepare()")
                                 startPlaybackTimeout()
                                 player.prepare()
                             } else {
-                                android.util.Log.e("MusicPlaybackService", "❌ WATCHDOG: Límites de reintentos excedidos para esta canción!")
+                                android.util.Log.e("MusicPlaybackService", "WATCHDOG: Límites de reintentos excedidos para esta canción!")
                                 forceSkipToNext("Máximos reintentos excedidos")
                             }
                         }
@@ -291,7 +291,7 @@ class MusicPlaybackService : MediaSessionService() {
                         cancelPlaybackTimeout()
                         // Forzamos reproducción si la cola tiene más items (autoplay manual)
                         if (player.mediaItemCount > 0 && player.hasNextMediaItem()) {
-                            android.util.Log.i("MusicPlaybackService", "⏭️ Canción terminada, reproduciendo siguiente en cola")
+                            android.util.Log.i("MusicPlaybackService", " Canción terminada, reproduciendo siguiente en cola")
                             resetIdleRetryCounter()
                             player.seekToNextMediaItem()
                             player.play()
@@ -394,7 +394,7 @@ class MusicPlaybackService : MediaSessionService() {
              setSmallIcon(R.drawable.ic_notification_custom)
         }
         
-        // 🎯 FIX: Custom Notification Builder para interceptar y arreglar URIs de Artwork
+        // FIX: Custom Notification Builder para interceptar y arreglar URIs de Artwork
         // SystemUI a menudo falla al leer URIs content:// si son externos o transitorios.
         // Proveeremos un builder personalizado si es necesario, pero el provider superior es un buen punto de partida.
         
@@ -442,7 +442,7 @@ class MusicPlaybackService : MediaSessionService() {
             delay(PLAYBACK_TIMEOUT_MS)
             // Si el timeout expira y el reproductor sigue sin arrancar, forzamos la acción
             if (!player.isPlaying && player.playWhenReady) {
-                android.util.Log.e("MusicPlaybackService", "⏱️ TIMEOUT: La reproducción falló en iniciar tras ${PLAYBACK_TIMEOUT_MS/1000}s. Saltando...")
+                android.util.Log.e("MusicPlaybackService", " TIMEOUT: La reproducción falló en iniciar tras ${PLAYBACK_TIMEOUT_MS/1000}s. Saltando...")
                 forceSkipToNext("Timeout de Buffering agotado")
             }
         }
@@ -454,7 +454,7 @@ class MusicPlaybackService : MediaSessionService() {
     }
     
     private fun forceSkipToNext(reason: String) {
-        android.util.Log.e("MusicPlaybackService", "🚨 RECUPERACIÓN DE ERROR: $reason - Saltando pista problemática")
+        android.util.Log.e("MusicPlaybackService", "RECUPERACIÓN DE ERROR: $reason - Saltando pista problemática")
         
         // Limpiamos contadores de error
         idleRetryCount = 0
@@ -465,13 +465,13 @@ class MusicPlaybackService : MediaSessionService() {
         
         // Intentar reproducción del siguiente item
         if (player.hasNextMediaItem()) {
-            android.util.Log.i("MusicPlaybackService", "⏭️ Intentando reproducir siguiente pista...")
+            android.util.Log.i("MusicPlaybackService", "Intentando reproducir siguiente pista...")
             player.seekToNextMediaItem()
             player.prepare()
             player.play()
             startPlaybackTimeout() // Reiniciamos guardia para la nueva pista
         } else {
-            android.util.Log.w("MusicPlaybackService", "🛑 Fin de la cola alcanzado tras error. Deteniendo servicio.")
+            android.util.Log.w("MusicPlaybackService", "Fin de la cola alcanzado tras error. Deteniendo servicio.")
             player.playWhenReady = false
         }
     }
@@ -671,7 +671,7 @@ class MusicPlaybackService : MediaSessionService() {
                 try {
                     val bitmap = downloadBitmap(artworkUri)
                     if (bitmap != null) {
-                        // 🗑️ Widget Cache Busting Cleanup
+                        // Widget Cache Busting Cleanup
                         cacheDir.listFiles { _, name -> name.startsWith("widget_cover_") }?.forEach { it.delete() }
                         
                         val fileName = "widget_cover_${System.currentTimeMillis()}.png"
@@ -860,7 +860,7 @@ class MusicPlaybackService : MediaSessionService() {
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                android.util.Log.e("MusicPlaybackService", "❌ ERROR FATAL ZOMBIE: ${error.message}")
+                android.util.Log.e("MusicPlaybackService", "ERROR FATAL ZOMBIE: ${error.message}")
                 android.util.Log.e("MusicPlaybackService", "   - Nombre Error: ${error.errorCodeName}")
                 android.util.Log.e("MusicPlaybackService", "   - URI: ${player.currentMediaItem?.localConfiguration?.uri}")
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -893,7 +893,7 @@ class MusicPlaybackService : MediaSessionService() {
                             }
                             idleRetryCount++
                             if (idleRetryCount <= MAX_IDLE_RETRIES) {
-                                android.util.Log.w("MusicPlaybackService", "🔄 WATCHDOG (Resurrección): IDLE retry $idleRetryCount/$MAX_IDLE_RETRIES")
+                                android.util.Log.w("MusicPlaybackService", " WATCHDOG (Resurrección): IDLE retry $idleRetryCount/$MAX_IDLE_RETRIES")
                                 startPlaybackTimeout()
                                 player.prepare()
                             } else {
@@ -931,7 +931,7 @@ class MusicPlaybackService : MediaSessionService() {
                             try {
                                 val bitmap = downloadBitmap(artworkUri)
                                 if (bitmap != null) {
-                                    // 🗑️ Limpieza Segura (Resurrección): Solo borra archivos mayores a 600s
+                                    // Limpieza Segura (Resurrección): Solo borra archivos mayores a 600s
                                     val currentTime = System.currentTimeMillis()
                                     cacheDir.listFiles { _, name -> name.startsWith("notif_cover_") }?.forEach { file ->
                                         try {
@@ -1045,13 +1045,13 @@ class MusicPlaybackService : MediaSessionService() {
                     // Estrategia A: Búsqueda por Nombre de Archivo (Alta prioridad para descargas)
                     if (filename != null) {
                         newUri = mediaRepository.findSongUriInMediaStoreByFilename(filename)
-                        if (newUri != null) android.util.Log.i("MusicPlaybackService", "✅ REPARADO vía Nombre Archivo: $filename")
+                        if (newUri != null) android.util.Log.i("MusicPlaybackService", " REPARADO vía Nombre Archivo: $filename")
                     }
                     
                     // Estrategia B: Búsqueda por Título + Artista / Solo Título
                     if (newUri == null && title.isNotEmpty()) {
                         newUri = mediaRepository.findSongUriInMediaStore(title, artist)
-                        if (newUri != null) android.util.Log.i("MusicPlaybackService", "✅ REPARADO vía metadatos: $title")
+                        if (newUri != null) android.util.Log.i("MusicPlaybackService", " REPARADO vía metadatos: $title")
                     }
                     
                     if (newUri != null && newUri != uri) {
@@ -1059,7 +1059,7 @@ class MusicPlaybackService : MediaSessionService() {
                             .setUri(newUri)
                             .build()
                     } else if (newUri == null) {
-                        android.util.Log.w("MusicPlaybackService", "⚠️ Reparación fallida para '$title' ($filename)")
+                        android.util.Log.w("MusicPlaybackService", "Reparación fallida para '$title' ($filename)")
                         
                         // Si es una descarga y falta permanentemente, borrar de DB para evitar bucles de salto
                         if (isSaf || isAbsolute) {
@@ -1067,7 +1067,7 @@ class MusicPlaybackService : MediaSessionService() {
                                 val songIdString = mediaItem.mediaId
                                 if (songIdString.isNotEmpty() && songIdString.all { it.isDigit() }) {
                                     val songId = songIdString.toLong()
-                                    android.util.Log.i("MusicPlaybackService", "🗑️ Auto-limpiando descarga fantasma: $title (ID: $songId)")
+                                    android.util.Log.i("MusicPlaybackService", " Auto-limpiando descarga fantasma: $title (ID: $songId)")
                                     val db = com.amurayada.music.data.database.DownloadDatabase.getDatabase(this@MusicPlaybackService)
                                     db.downloadDao().deleteDownloadById(songId)
                                 }
@@ -1077,7 +1077,7 @@ class MusicPlaybackService : MediaSessionService() {
                         }
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("MusicPlaybackService", "❌ Error durante reparación de URI", e)
+                    android.util.Log.e("MusicPlaybackService", "error durante reparación de URI", e)
                 }
             }
         }

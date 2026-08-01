@@ -61,11 +61,7 @@ Eres libre de usarlo, modificarlo y compartirlo, manteniendo la misma libertad p
 
 ---
 
-## 🏷️ Icono
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/8bcb12aa-d2c5-4121-8587-ab36a3628dcb" width="200" alt="Harmoni Icon">
-</p>
 
 ---
 
